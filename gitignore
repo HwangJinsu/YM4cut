@@ -1,0 +1,51 @@
+# Node.js modules
+node_modules/
+
+# npm debug logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Dependency directories
+.pnp/
+.pnp.js
+
+# Build output directories
+build/          # React build output
+dist/           # electron-builder output
+release/        # another common electron-builder output
+*.asar          # Packaged Electron app archive
+*.asar.unpacked # Unpacked contents of asar archive
+
+# Local environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env*.local
+
+# Electron specific
+# electron-builder cache
+.electron-builder/
+# electron-builder debug logs
+electron-builder-debug.log*
+
+# OS generated files
+.DS_Store       # macOS
+Thumbs.db       # Windows
+ehthumbs.db     # Windows
+ehthumbs_vista.db # Windows
+*.stackdump     # Windows
+
+# IDE specific files
+.vscode/        # VS Code settings (if not shared)
+.idea/          # IntelliJ/WebStorm settings
+*.sublime-project
+*.sublime-workspace
+
+# Project specific generated files (from your project context)
+captures/       # User captured photos
+logs/           # Application logs
+output/         # Final composite images (if not handled by 'dist/')
+config/settings.json # User-specific settings, should not be committed
