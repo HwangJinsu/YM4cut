@@ -58,6 +58,9 @@
     "nodemon": "^3.1.10",
     "wait-on": "^9.0.1"
   },
+  "overrides": {
+    "eslint-plugin-react": "7.32.2"
+  },
   "build": {
     "appId": "com.example.ym4cut",
     "files": [
