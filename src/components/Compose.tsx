@@ -136,65 +136,75 @@ const Compose: React.FC = () => {
 
   const styles = {
     container: {
-      display: 'flex',
-      flexDirection: 'column' as const,
-      alignItems: 'center',
-      justifyContent: 'flex-start' as const,
+      position: 'relative' as const,
       height: '100vh',
       width: '100vw',
       backgroundColor: 'var(--background-color)',
-      textAlign: 'center' as const,
-      padding: '40px 60px',
+      color: 'var(--text-color)',
+      overflow: 'hidden' as const,
+    },
+    content: {
+      display: 'flex',
+      flexDirection: 'column' as const,
+      alignItems: 'center',
+      height: '100%',
+      width: '100%',
+      padding: '40px 60px 200px',
       boxSizing: 'border-box' as const,
       overflowY: 'auto' as const,
     },
     instructions: {
       fontSize: 'var(--body-font-size)',
       color: 'var(--text-color)',
-      marginBottom: '24px',
+      marginBottom: '16px',
+      textAlign: 'center' as const,
     },
     selectionCount: {
       color: 'var(--primary-color)',
       fontWeight: 600,
       marginLeft: '8px',
     },
+    previewTitle: {
+      fontSize: 'var(--button-font-size)',
+      fontWeight: 600,
+      marginBottom: '24px',
+    },
     imageGrid: {
       display: 'grid',
-      gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-      gap: '20px',
+      gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+      gap: '24px',
       width: '100%',
-      maxWidth: '1200px',
-      marginBottom: '30px',
+      maxWidth: '1400px',
     },
     imageCard: {
       position: 'relative' as const,
-      borderRadius: '16px',
+      borderRadius: '18px',
       overflow: 'hidden' as const,
-      boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
+      boxShadow: '0 8px 24px rgba(0,0,0,0.18)',
       cursor: 'pointer',
-      border: '4px solid transparent',
+      border: '5px solid transparent',
       transition: 'transform 0.2s ease-out, border 0.2s ease-out',
       backgroundColor: '#f5f5f5',
-      minHeight: '240px',
+      minHeight: '320px',
     },
     imageCardSelected: {
-      border: '4px solid var(--primary-color)',
-      transform: 'translateY(-6px)',
+      border: '5px solid var(--primary-color)',
+      transform: 'translateY(-8px)',
     },
     orderBadge: {
       position: 'absolute' as const,
-      top: '12px',
-      left: '12px',
-      width: '44px',
-      height: '44px',
+      top: '16px',
+      left: '16px',
+      width: '52px',
+      height: '52px',
       borderRadius: '50%',
-      backgroundColor: 'rgba(0,0,0,0.7)',
+      backgroundColor: 'rgba(0,0,0,0.75)',
       color: '#fff',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
       fontWeight: 700,
-      fontSize: '20px',
+      fontSize: '22px',
     },
     previewImage: {
       width: '100%',
@@ -208,25 +218,29 @@ const Compose: React.FC = () => {
       alignItems: 'center',
       justifyContent: 'center',
       color: '#999',
-      fontSize: '18px',
+      fontSize: '20px',
       background: 'linear-gradient(135deg, #f0f0f0, #fafafa)',
     },
-    buttonContainer: {
+    buttonRow: {
+      position: 'absolute' as const,
+      top: '75%',
+      left: '50%',
+      transform: 'translate(-50%, -50%)',
       display: 'flex',
-      gap: '24px',
+      gap: '32px',
       flexWrap: 'wrap' as const,
       justifyContent: 'center',
     },
     button: {
-      width: '250px',
-      height: '80px',
+      width: '260px',
+      height: '90px',
       backgroundColor: 'var(--primary-color)',
       color: 'white',
       fontSize: 'var(--button-font-size)',
       border: 'none',
-      borderRadius: '16px',
+      borderRadius: '18px',
       cursor: 'pointer',
-      boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
+      boxShadow: '0 6px 18px rgba(0,0,0,0.18)',
       transition: 'transform 0.2s ease-out, opacity 0.2s ease-out',
     },
     secondaryButton: {
@@ -237,35 +251,46 @@ const Compose: React.FC = () => {
       cursor: 'not-allowed',
     },
     statusMessage: {
-      marginTop: '24px',
+      position: 'absolute' as const,
+      top: '88%',
+      left: '50%',
+      transform: 'translateX(-50%)',
       fontSize: 'var(--body-font-size)',
       color: 'var(--primary-color)',
+      textAlign: 'center' as const,
+      width: '80%',
     },
     errorText: {
       fontSize: 'var(--body-font-size)',
       color: 'var(--error-color)',
       maxWidth: '80%',
-      marginBottom: '16px',
+      marginTop: '20px',
+      textAlign: 'center' as const,
     },
   };
 
   return (
     <div style={styles.container}>
-      <div style={styles.instructions}>
-        {reshootImages.length > 0
-          ? '총 8장의 사진이 준비되었습니다. 마음에 드는 4장을 순서대로 선택해 주세요.'
-          : '촬영된 사진을 확인하고 필요하면 재촬영을 진행하세요.'}
-        <span style={styles.selectionCount}>
-          {selectedIndexes.length}/{MAX_SELECTION}
-        </span>
-      </div>
+      <div style={styles.content}>
+        <div style={styles.instructions}>
+          {reshootImages.length > 0
+            ? '총 8장의 사진이 준비되었습니다. 마음에 드는 4장을 순서대로 선택해 주세요.'
+            : '촬영된 사진을 확인하고 필요하면 재촬영을 진행하세요.'}
+          <span style={styles.selectionCount}>
+            {selectedIndexes.length}/{MAX_SELECTION}
+          </span>
+        </div>
 
-      <div style={styles.imageGrid}>
-        {allImages.map((imagePath, index) => {
-          const preview = imagePreviews[index];
-          const selectionOrder = selectedIndexes.indexOf(index);
-          const isSelected = selectionOrder !== -1;
-          return (
+        <div style={styles.previewTitle}>
+          {allImages.length > MAX_SELECTION ? '8컷 미리보기' : '4컷 미리보기'}
+        </div>
+
+        <div style={styles.imageGrid}>
+          {allImages.map((imagePath, index) => {
+            const preview = imagePreviews[index];
+            const selectionOrder = selectedIndexes.indexOf(index);
+            const isSelected = selectionOrder !== -1;
+            return (
             <div
               key={imagePath}
               style={{
@@ -300,9 +325,10 @@ const Compose: React.FC = () => {
         })}
       </div>
 
-      {composeError && <div style={styles.errorText}>{composeError}</div>}
+        {composeError && <div style={styles.errorText}>{composeError}</div>}
+      </div>
 
-      <div style={styles.buttonContainer}>
+      <div style={styles.buttonRow}>
         <button
           style={{ ...styles.button, ...styles.secondaryButton }}
           onClick={handleRetake}
