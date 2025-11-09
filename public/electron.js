@@ -20,7 +20,7 @@ function createWindow() {
   if (isDev) {
     win.loadURL('http://localhost:3000');
   } else {
-    const indexPath = path.join(app.getAppPath(), 'build', 'index.html');
+    const indexPath = path.join(__dirname, 'index.html');
     win.loadFile(indexPath);
   }
 }
