@@ -8,7 +8,7 @@ type ComposeState = {
 
 type ImageMeta = {
   src: string;
-  isWide: boolean;
+  aspectRatio: number;
 };
 
 const MAX_SELECTION = 4;
@@ -35,7 +35,7 @@ const Compose: React.FC = () => {
 
   const [selectedIndexes, setSelectedIndexes] = useState<number[]>(initialSelection);
   const [imageMeta, setImageMeta] = useState<ImageMeta[]>(() =>
-    allImages.map(() => ({ src: '', isWide: false }))
+    allImages.map(() => ({ src: '', aspectRatio: 3 / 4 }))
   );
   const [composing, setComposing] = useState<boolean>(initialSelection.length === MAX_SELECTION);
   const [finalImage, setFinalImage] = useState<string | null>(null);
@@ -50,18 +50,24 @@ const Compose: React.FC = () => {
           try {
             const dataUrl = await window.electron.getImageAsBase64(imagePath);
             if (!dataUrl) {
-              return { src: '', isWide: false };
+              return { src: '', aspectRatio: 3 / 4 };
             }
-            const isWide = await new Promise<boolean>(resolve => {
+            const ratio = await new Promise<number>(resolve => {
               const img = new Image();
-              img.onload = () => resolve(img.width >= img.height);
-              img.onerror = () => resolve(false);
+              img.onload = () => {
+                if (img.height === 0) {
+                  resolve(3 / 4);
+                } else {
+                  resolve(img.width / img.height);
+                }
+              };
+              img.onerror = () => resolve(3 / 4);
               img.src = dataUrl;
             });
-            return { src: dataUrl, isWide };
+            return { src: dataUrl, aspectRatio: ratio };
           } catch (error) {
             console.error('Failed to load preview:', error);
-            return { src: '', isWide: false };
+            return { src: '', aspectRatio: 3 / 4 };
           }
         })
       );
@@ -209,15 +215,17 @@ const Compose: React.FC = () => {
       border: '5px solid var(--primary-color)',
       transform: 'translateY(-8px)',
     },
-    imageFrame: (isWide: boolean) => ({
+    imageFrame: (ratio: number) => ({
       position: 'relative' as const,
-      width: '90%',
-      maxWidth: '420px',
-      aspectRatio: isWide ? '4 / 3' : '3 / 4',
+      width: '100%',
+      maxWidth: '520px',
+      aspectRatio: ratio || 3 / 4,
       backgroundColor: '#fff',
       borderRadius: '12px',
       overflow: 'hidden' as const,
       boxShadow: '0 6px 18px rgba(0,0,0,0.15)',
+      transform: 'scale(1.3)',
+      transformOrigin: 'center',
     }),
     orderBadge: {
       position: 'absolute' as const,
@@ -323,7 +331,7 @@ const Compose: React.FC = () => {
 
         <div style={styles.imageGrid(allImages.length > MAX_SELECTION ? 4 : 2)}>
           {allImages.map((imagePath, index) => {
-            const meta = imageMeta[index] ?? { src: '', isWide: false };
+            const meta = imageMeta[index] ?? { src: '', aspectRatio: 3 / 4 };
             const preview = meta.src;
             const selectionOrder = selectedIndexes.indexOf(index);
             const isSelected = selectionOrder !== -1;
@@ -345,7 +353,7 @@ const Compose: React.FC = () => {
                 }
               }}
               >
-                <div style={styles.imageFrame(meta.isWide)}>
+                <div style={styles.imageFrame(meta.aspectRatio)}>
                   {isSelected && (
                     <div style={styles.orderBadge}>{selectionOrder + 1}</div>
                   )}
