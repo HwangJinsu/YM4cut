@@ -1,16 +1,17 @@
 const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
+const { pathToFileURL } = require('url');
 const fs = require('fs');
 const sharp = require('sharp');
 
-let printer;
+let PrinterModule;
 try {
   // node-printer offers access to native printers for actual print jobs
   // but can fail to load if drivers are missing; guard the require.
-  printer = require('node-printer');
+  PrinterModule = require('node-printer');
 } catch (error) {
   console.warn('[printer] Failed to load node-printer module:', error);
-  printer = null;
+  PrinterModule = null;
 }
 
 const isDev = !app.isPackaged;
@@ -87,39 +88,67 @@ ipcMain.handle('save-settings', async (event, settings) => {
   fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
 });
 
-ipcMain.handle('get-printers', async () => {
-  try {
-    if (printer) {
-      const nativePrinters = printer.getPrinters();
-      if (Array.isArray(nativePrinters) && nativePrinters.length > 0) {
-        return nativePrinters;
-      }
+async function enumeratePrinters() {
+  const devices = new Map();
+
+  if (PrinterModule && typeof PrinterModule.list === 'function') {
+    try {
+      const nativePrinters = PrinterModule.list();
+      nativePrinters.forEach(name => {
+        if (!name) return;
+        devices.set(name, {
+          name,
+          displayName: name,
+          isDefault: false,
+          source: 'node-printer',
+        });
+      });
+    } catch (nativeError) {
+      console.error('Failed to get printers via node-printer:', nativeError);
     }
-  } catch (nativeError) {
-    console.error('Failed to get printers via node-printer:', nativeError);
   }
 
   try {
     const win = getMainWindow();
-    if (!win) {
-      return [];
-    }
-    const webPrinters = win.webContents.getPrintersAsync
-      ? await win.webContents.getPrintersAsync()
-      : win.webContents.getPrinters();
+    if (win) {
+      const webPrinters = win.webContents.getPrintersAsync
+        ? await win.webContents.getPrintersAsync()
+        : win.webContents.getPrinters();
 
-    return webPrinters
-      .map(device => ({
-        name: device.name || device.printerName || device.deviceName,
-        displayName: device.displayName || device.description || device.name,
-        isDefault: Boolean(device.isDefault),
-      }))
-      .filter(device => device.name);
+      webPrinters.forEach(device => {
+        const name = device.name || device.printerName || device.deviceName;
+        if (!name) {
+          return;
+        }
+        const existing = devices.get(name) || {};
+        devices.set(name, {
+          name,
+          displayName: device.displayName || device.description || existing.displayName || name,
+          isDefault: device.isDefault ?? existing.isDefault ?? false,
+          source: existing.source || 'webContents',
+        });
+      });
+    }
   } catch (error) {
     console.error('Failed to get printers via webContents:', error);
-    return [];
   }
-});
+
+  return Array.from(devices.values());
+}
+
+async function resolvePrinterName(preferredName) {
+  if (preferredName) {
+    return preferredName;
+  }
+  const printers = await enumeratePrinters();
+  const defaultPrinter = printers.find(printer => printer.isDefault);
+  if (defaultPrinter) {
+    return defaultPrinter.name;
+  }
+  return printers[0]?.name || null;
+}
+
+ipcMain.handle('get-printers', async () => enumeratePrinters());
 
 ipcMain.handle('get-image-as-base64', async (event, filePath) => {
   try {
@@ -243,46 +272,85 @@ ipcMain.handle('compose-images', async (event, images) => {
 });
 
 ipcMain.handle('print-image', async (event, { imagePath, printerName }) => {
-  if (!printer) {
-    throw new Error('프린터 모듈을 초기화할 수 없어 인쇄를 진행할 수 없습니다.');
+  const targetPrinter = await resolvePrinterName(printerName);
+  if (!targetPrinter) {
+    throw new Error('프린터를 찾을 수 없습니다. 시스템에 프린터가 설치되어 있는지 확인해주세요.');
   }
 
-  return new Promise((resolve, reject) => {
-    let targetPrinter = printerName;
-    if (!targetPrinter) {
-      try {
-        const printers = printer.getPrinters();
-        const defaultPrinter = printers.find(p => p.isDefault);
-        if (defaultPrinter) {
-          targetPrinter = defaultPrinter.name;
-        } else if (printers.length > 0) {
-          targetPrinter = printers[0].name;
-        }
-      } catch (error) {
-        console.error('Failed to get default printer:', error);
-        return reject(error);
+  const tryNativePrint = () => new Promise((resolve, reject) => {
+    try {
+      const Printer = PrinterModule;
+      if (!Printer || typeof Printer !== 'function') {
+        return reject(new Error('node-printer 모듈을 사용할 수 없습니다.'));
       }
+      const device = new Printer(targetPrinter);
+      const job = device.printFile(imagePath);
+      if (!job || typeof job.once !== 'function') {
+        return reject(new Error('프린터 작업을 시작하지 못했습니다.'));
+      }
+      job.once('error', err => reject(new Error(err ? err.toString() : '알 수 없는 오류')));
+      job.once('sent', () => resolve());
+    } catch (error) {
+      reject(error);
     }
+  });
 
-    if (!targetPrinter) {
-      const errorMsg = "프린터를 찾을 수 없습니다. 시스템에 프린터가 설치되어 있는지 확인해주세요.";
-      console.log(errorMsg);
-      return reject(new Error(errorMsg));
-    }
+  const tryBrowserPrint = () => new Promise((resolve, reject) => {
+    const printWindow = new BrowserWindow({
+      show: false,
+      webPreferences: { offscreen: true },
+    });
 
-    printer.printFile({
-      filename: imagePath,
-      printer: targetPrinter,
-      success: function (jobID) {
-        console.log(`Sent to printer ${targetPrinter} with job ID: ${jobID}`);
-        resolve();
-      },
-      error: function (err) {
-        console.log("Error printing: " + err);
-        reject(err);
-      },
+    const cleanup = () => {
+      if (!printWindow.isDestroyed()) {
+        printWindow.close();
+      }
+    };
+
+    const imageUrl = pathToFileURL(imagePath).toString();
+    const html = `
+      <html>
+        <body style="margin:0;display:flex;justify-content:center;align-items:center;background:#fff;">
+          <img src="${imageUrl}" style="max-width:100%;max-height:100%;object-fit:contain;" />
+        </body>
+      </html>
+    `;
+    printWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+
+    printWindow.webContents.on('did-finish-load', () => {
+      printWindow.webContents.print(
+        {
+          silent: true,
+          deviceName: targetPrinter,
+          printBackground: true,
+        },
+        (success, failureReason) => {
+          cleanup();
+          if (success) {
+            resolve();
+          } else {
+            reject(new Error(failureReason || '인쇄에 실패했습니다.'));
+          }
+        }
+      );
+    });
+
+    printWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
+      cleanup();
+      reject(new Error(`인쇄 미리보기 로드 실패: ${errorDescription || errorCode}`));
     });
   });
+
+  if (PrinterModule && process.platform !== 'win32') {
+    try {
+      await tryNativePrint();
+      return;
+    } catch (nativeError) {
+      console.warn('Native print failed, attempting browser fallback:', nativeError);
+    }
+  }
+
+  await tryBrowserPrint();
 });
 
 ipcMain.handle('quit-app', async () => {
