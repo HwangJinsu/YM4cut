@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 
 const Camera: React.FC = () => {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -10,6 +10,8 @@ const Camera: React.FC = () => {
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [isFlipped, setIsFlipped] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
+  const baseImagesRef = useRef<string[]>([]);
 
   const styles = {
     container: {
@@ -101,6 +103,15 @@ const Camera: React.FC = () => {
   };
 
   useEffect(() => {
+    const state = location.state as { baseImages?: string[] } | null;
+    if (state?.baseImages && Array.isArray(state.baseImages) && state.baseImages.length === 4) {
+      baseImagesRef.current = state.baseImages;
+    } else {
+      baseImagesRef.current = [];
+    }
+  }, [location.state]);
+
+  useEffect(() => {
     const getCamera = async () => {
       try {
         const settings = await window.electron.getSettings();
@@ -133,7 +144,12 @@ const Camera: React.FC = () => {
 
   useEffect(() => {
     if (capturedImages.length === 4) {
-      navigate('/compose', { state: { images: capturedImages } });
+      const baseImages = baseImagesRef.current;
+      if (baseImages.length > 0) {
+        navigate('/compose', { state: { baseImages: [...baseImages], reshootImages: [...capturedImages] } });
+      } else {
+        navigate('/compose', { state: { baseImages: [...capturedImages] } });
+      }
     }
   }, [capturedImages, navigate]);
 

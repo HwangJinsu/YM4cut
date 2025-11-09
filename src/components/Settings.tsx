@@ -240,10 +240,10 @@ const Settings: React.FC = () => {
 
   return (
     <div style={styles.container}>
-      <h1 style={styles.title}>설정</h1>
+      <h1 style={styles.title}>⚙️ 설정</h1>
 
       <div style={styles.settingItem}>
-        <h2 style={styles.settingHeader}>이미지 효과</h2>
+        <h2 style={styles.settingHeader}>🎨 이미지 효과</h2>
         <div style={styles.sliderContainer}>
           <label style={styles.sliderLabel}>밝기: {brightness.toFixed(2)}</label>
           <input 
@@ -283,7 +283,7 @@ const Settings: React.FC = () => {
       </div>
 
       <div style={styles.settingItem}>
-        <h2 style={styles.settingHeader}>카메라 설정</h2>
+        <h2 style={styles.settingHeader}>📷 카메라 설정</h2>
         <select style={styles.select} value={selectedCamera} onChange={e => setSelectedCamera(e.target.value)}>
           <option value="">카메라를 선택하세요</option>
           {cameras.map(camera => (
@@ -303,7 +303,7 @@ const Settings: React.FC = () => {
       </div>
 
       <div style={styles.settingItem}>
-        <h2 style={styles.settingHeader}>프린터 장치</h2>
+        <h2 style={styles.settingHeader}>🖨️ 프린터 장치</h2>
         <select style={styles.select} value={selectedPrinter} onChange={e => setSelectedPrinter(e.target.value)}>
           <option value="">프린터를 선택하세요</option>
           {printers.map(printer => {
@@ -329,7 +329,7 @@ const Settings: React.FC = () => {
       </div>
 
       <div style={styles.settingItem}>
-        <h2 style={styles.settingHeader}>네컷 이미지 저장 경로</h2>
+        <h2 style={styles.settingHeader}>🗂️ 네컷 이미지 저장 경로</h2>
         <button style={styles.button} onClick={handleSelectOutputPath} onMouseOver={handleMouseOver} onMouseOut={handleMouseOut}>
           경로 선택
         </button>
@@ -337,7 +337,7 @@ const Settings: React.FC = () => {
       </div>
 
       <div style={styles.settingItem}>
-        <h2 style={styles.settingHeader}>메인 화면 이미지</h2>
+        <h2 style={styles.settingHeader}>🖼️ 메인 화면 이미지</h2>
         <button style={styles.button} onClick={handleSelectMainImage} onMouseOver={handleMouseOver} onMouseOut={handleMouseOut}>
           이미지 선택
         </button>
@@ -348,7 +348,7 @@ const Settings: React.FC = () => {
       </div>
 
       <div style={styles.settingItem}>
-        <h2 style={styles.settingHeader}>사진 템플릿 이미지</h2>
+        <h2 style={styles.settingHeader}>🧩 사진 템플릿 이미지</h2>
         <button style={styles.button} onClick={handleSelectTemplateImage} onMouseOver={handleMouseOver} onMouseOut={handleMouseOut}>
           템플릿 선택
         </button>
@@ -359,7 +359,7 @@ const Settings: React.FC = () => {
       </div>
 
       <div style={styles.settingItem}>
-        <h2 style={styles.settingHeader}>이미지 파일 재인쇄</h2>
+        <h2 style={styles.settingHeader}>🔁🖨️ 이미지 파일 재인쇄</h2>
         <button style={styles.button} onClick={handleReprint} onMouseOver={handleMouseOver} onMouseOut={handleMouseOut}>
           파일 선택하여 인쇄
         </button>
