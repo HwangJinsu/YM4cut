@@ -17,11 +17,12 @@ function createWindow() {
     },
   });
 
-  win.loadURL(
-    isDev
-      ? 'http://localhost:3000'
-      : `file://${path.join(app.getAppPath(), 'build', 'index.html')}`
-  );
+  if (isDev) {
+    win.loadURL('http://localhost:3000');
+  } else {
+    const indexPath = path.join(app.getAppPath(), 'build', 'index.html');
+    win.loadFile(indexPath);
+  }
 }
 
 app.whenReady().then(() => {
