@@ -10,4 +10,5 @@ contextBridge.exposeInMainWorld('electron', {
   getSettings: () => ipcRenderer.invoke('get-settings'),
   getPrinters: () => ipcRenderer.invoke('get-printers'),
   getImageAsBase64: (filePath) => ipcRenderer.invoke('get-image-as-base64', filePath),
+  quitApp: () => ipcRenderer.invoke('quit-app'),
 });

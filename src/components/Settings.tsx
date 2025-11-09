@@ -306,9 +306,25 @@ const Settings: React.FC = () => {
         <h2 style={styles.settingHeader}>프린터 장치</h2>
         <select style={styles.select} value={selectedPrinter} onChange={e => setSelectedPrinter(e.target.value)}>
           <option value="">프린터를 선택하세요</option>
-          {printers.map(printer => (
-            <option key={printer.name} value={printer.name}>{printer.name}</option>
-          ))}
+          {printers.map(printer => {
+            if (typeof printer === 'string') {
+              return (
+                <option key={printer} value={printer}>
+                  {printer}
+                </option>
+              );
+            }
+            const name = printer?.name || printer?.printerName || printer?.deviceName;
+            if (!name) {
+              return null;
+            }
+            const label = printer.displayName || printer.description || name;
+            return (
+              <option key={name} value={name}>
+                {label}
+              </option>
+            );
+          })}
         </select>
       </div>
 

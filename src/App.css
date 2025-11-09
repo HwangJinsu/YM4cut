@@ -41,3 +41,34 @@ body {
     box-shadow: 0 4px 16px rgba(0,0,0,0.15);
   }
 }
+
+.app-shell {
+  position: relative;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+}
+
+.app-exit-button {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.45);
+  color: #ffffff;
+  font-size: 18px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  transition: background 0.2s ease;
+}
+
+.app-exit-button:hover {
+  background: rgba(0, 0, 0, 0.65);
+}

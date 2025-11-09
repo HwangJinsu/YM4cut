@@ -8,6 +8,7 @@ export interface IElectronAPI {
   getSettings: () => Promise<any>;
   getPrinters: () => Promise<any[]>;
   getImageAsBase64: (filePath: string) => Promise<string | null>;
+  quitApp: () => Promise<void>;
 }
 
 declare global {

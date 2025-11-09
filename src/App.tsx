@@ -8,6 +8,18 @@ import Print from './components/Print';
 import Settings from './components/Settings';
 import './App.css';
 
+function ExitButton() {
+  const handleExit = () => {
+    window.electron.quitApp();
+  };
+
+  return (
+    <button className="app-exit-button" onClick={handleExit} aria-label="앱 종료">
+      X
+    </button>
+  );
+}
+
 function AppContent() {
   const location = useLocation();
   return (
@@ -25,7 +37,10 @@ function AppContent() {
 function App() {
   return (
     <Router>
-      <AppContent />
+      <div className="app-shell">
+        <ExitButton />
+        <AppContent />
+      </div>
     </Router>
   );
 }

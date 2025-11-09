@@ -2,10 +2,30 @@ const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const sharp = require('sharp');
-const printer = require('node-printer');
+
+let printer;
+try {
+  // node-printer offers access to native printers for actual print jobs
+  // but can fail to load if drivers are missing; guard the require.
+  printer = require('node-printer');
+} catch (error) {
+  console.warn('[printer] Failed to load node-printer module:', error);
+  printer = null;
+}
+
+const isDev = !app.isPackaged;
+let mainWindow = null;
+
+function getMainWindow() {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    return mainWindow;
+  }
+  const [win] = BrowserWindow.getAllWindows();
+  return win ?? null;
+}
 
 function createWindow() {
-  const win = new BrowserWindow({
+  mainWindow = new BrowserWindow({
     width: 1080,
     height: 1920,
     kiosk: true,
@@ -16,12 +36,11 @@ function createWindow() {
     },
   });
 
-  const isDev = !app.isPackaged;
   if (isDev) {
-    win.loadURL('http://localhost:3000');
+    mainWindow.loadURL('http://localhost:3000');
   } else {
     const indexPath = path.join(__dirname, 'index.html');
-    win.loadFile(indexPath);
+    mainWindow.loadFile(indexPath);
   }
 }
 
@@ -70,11 +89,34 @@ ipcMain.handle('save-settings', async (event, settings) => {
 
 ipcMain.handle('get-printers', async () => {
   try {
-    console.log('Available printer object:', JSON.stringify(printer));
-    const printers = printer.getPrinters();
-    return printers;
+    if (printer) {
+      const nativePrinters = printer.getPrinters();
+      if (Array.isArray(nativePrinters) && nativePrinters.length > 0) {
+        return nativePrinters;
+      }
+    }
+  } catch (nativeError) {
+    console.error('Failed to get printers via node-printer:', nativeError);
+  }
+
+  try {
+    const win = getMainWindow();
+    if (!win) {
+      return [];
+    }
+    const webPrinters = win.webContents.getPrintersAsync
+      ? await win.webContents.getPrintersAsync()
+      : win.webContents.getPrinters();
+
+    return webPrinters
+      .map(device => ({
+        name: device.name || device.printerName || device.deviceName,
+        displayName: device.displayName || device.description || device.name,
+        isDefault: Boolean(device.isDefault),
+      }))
+      .filter(device => device.name);
   } catch (error) {
-    console.error('Failed to get printers:', error);
+    console.error('Failed to get printers via webContents:', error);
     return [];
   }
 });
@@ -201,6 +243,10 @@ ipcMain.handle('compose-images', async (event, images) => {
 });
 
 ipcMain.handle('print-image', async (event, { imagePath, printerName }) => {
+  if (!printer) {
+    throw new Error('프린터 모듈을 초기화할 수 없어 인쇄를 진행할 수 없습니다.');
+  }
+
   return new Promise((resolve, reject) => {
     let targetPrinter = printerName;
     if (!targetPrinter) {
@@ -237,6 +283,10 @@ ipcMain.handle('print-image', async (event, { imagePath, printerName }) => {
       },
     });
   });
+});
+
+ipcMain.handle('quit-app', async () => {
+  app.quit();
 });
 
 ipcMain.handle('open-file-dialog', async () => {
