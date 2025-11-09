@@ -73,13 +73,20 @@ const Camera: React.FC = () => {
       textDecoration: 'none',
       zIndex: 10,
     },
-    startButton: {
+    startOverlay: {
       position: 'absolute' as 'absolute',
-      top: '50%',
-      left: '50%',
-      transform: 'translate(-50%, -50%)',
-      width: '250px',
-      height: '100px',
+      top: 0,
+      left: 0,
+      width: '100%',
+      height: '100%',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 5,
+    },
+    startButton: {
+      width: '260px',
+      height: '110px',
       backgroundColor: 'var(--primary-color)',
       color: 'white',
       fontSize: '28pt',
@@ -88,6 +95,7 @@ const Camera: React.FC = () => {
       cursor: 'pointer',
       boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
       animation: 'pulse 2s infinite',
+      pointerEvents: 'auto' as 'auto',
     },
     shutter: {
       position: 'absolute' as 'absolute',
@@ -213,7 +221,9 @@ const Camera: React.FC = () => {
         <div style={styles.countdown}>{countdown}</div>
       )}
       {capturedImages.length === 0 && countdown === null && !cameraError && (
-        <button style={styles.startButton} onClick={startCaptureSequence}>촬영 시작</button>
+        <div style={styles.startOverlay}>
+          <button style={styles.startButton} onClick={startCaptureSequence}>촬영 시작</button>
+        </div>
       )}
     </div>
   );

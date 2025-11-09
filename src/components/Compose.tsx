@@ -6,6 +6,11 @@ type ComposeState = {
   reshootImages?: string[];
 };
 
+type ImageMeta = {
+  src: string;
+  isWide: boolean;
+};
+
 const MAX_SELECTION = 4;
 
 const Compose: React.FC = () => {
@@ -29,7 +34,9 @@ const Compose: React.FC = () => {
     reshootImages.length > 0 ? [] : Array.from({ length: MAX_SELECTION }, (_, index) => index);
 
   const [selectedIndexes, setSelectedIndexes] = useState<number[]>(initialSelection);
-  const [imagePreviews, setImagePreviews] = useState<string[]>(Array(allImages.length).fill(''));
+  const [imageMeta, setImageMeta] = useState<ImageMeta[]>(() =>
+    allImages.map(() => ({ src: '', isWide: false }))
+  );
   const [composing, setComposing] = useState<boolean>(initialSelection.length === MAX_SELECTION);
   const [finalImage, setFinalImage] = useState<string | null>(null);
   const [composeError, setComposeError] = useState<string | null>(null);
@@ -42,15 +49,24 @@ const Compose: React.FC = () => {
         allImages.map(async imagePath => {
           try {
             const dataUrl = await window.electron.getImageAsBase64(imagePath);
-            return dataUrl ?? '';
+            if (!dataUrl) {
+              return { src: '', isWide: false };
+            }
+            const isWide = await new Promise<boolean>(resolve => {
+              const img = new Image();
+              img.onload = () => resolve(img.width >= img.height);
+              img.onerror = () => resolve(false);
+              img.src = dataUrl;
+            });
+            return { src: dataUrl, isWide };
           } catch (error) {
             console.error('Failed to load preview:', error);
-            return '';
+            return { src: '', isWide: false };
           }
         })
       );
       if (isActive) {
-        setImagePreviews(previews);
+        setImageMeta(previews);
       }
     };
 
@@ -169,13 +185,13 @@ const Compose: React.FC = () => {
       fontWeight: 600,
       marginBottom: '24px',
     },
-    imageGrid: {
+    imageGrid: (columns: number) => ({
       display: 'grid',
-      gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-      gap: '24px',
+      gridTemplateColumns: `repeat(${columns}, minmax(260px, 1fr))`,
+      gap: '28px',
       width: '100%',
       maxWidth: '1400px',
-    },
+    }),
     imageCard: {
       position: 'relative' as const,
       borderRadius: '18px',
@@ -185,12 +201,24 @@ const Compose: React.FC = () => {
       border: '5px solid transparent',
       transition: 'transform 0.2s ease-out, border 0.2s ease-out',
       backgroundColor: '#f5f5f5',
-      minHeight: '320px',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
     },
     imageCardSelected: {
       border: '5px solid var(--primary-color)',
       transform: 'translateY(-8px)',
     },
+    imageFrame: (isWide: boolean) => ({
+      position: 'relative' as const,
+      width: '90%',
+      maxWidth: '420px',
+      aspectRatio: isWide ? '4 / 3' : '3 / 4',
+      backgroundColor: '#fff',
+      borderRadius: '12px',
+      overflow: 'hidden' as const,
+      boxShadow: '0 6px 18px rgba(0,0,0,0.15)',
+    }),
     orderBadge: {
       position: 'absolute' as const,
       top: '16px',
@@ -205,13 +233,21 @@ const Compose: React.FC = () => {
       justifyContent: 'center',
       fontWeight: 700,
       fontSize: '22px',
+      zIndex: 2,
     },
     previewImage: {
+      position: 'absolute' as const,
+      top: 0,
+      left: 0,
       width: '100%',
       height: '100%',
-      objectFit: 'cover' as const,
+      objectFit: 'contain' as const,
+      backgroundColor: '#000',
     },
     imagePlaceholder: {
+      position: 'absolute' as const,
+      top: 0,
+      left: 0,
       width: '100%',
       height: '100%',
       display: 'flex',
@@ -285,13 +321,14 @@ const Compose: React.FC = () => {
           {allImages.length > MAX_SELECTION ? '8컷 미리보기' : '4컷 미리보기'}
         </div>
 
-        <div style={styles.imageGrid}>
+        <div style={styles.imageGrid(allImages.length > MAX_SELECTION ? 4 : 2)}>
           {allImages.map((imagePath, index) => {
-            const preview = imagePreviews[index];
+            const meta = imageMeta[index] ?? { src: '', isWide: false };
+            const preview = meta.src;
             const selectionOrder = selectedIndexes.indexOf(index);
             const isSelected = selectionOrder !== -1;
             return (
-            <div
+              <div
               key={imagePath}
               style={{
                 ...styles.imageCard,
@@ -307,23 +344,25 @@ const Compose: React.FC = () => {
                   toggleSelection(index);
                 }
               }}
-            >
-              {isSelected && (
-                <div style={styles.orderBadge}>{selectionOrder + 1}</div>
-              )}
-              {preview ? (
-                <img
-                  src={preview}
-                  style={styles.previewImage}
-                  alt={`촬영 이미지 ${index + 1}`}
-                />
-              ) : (
-                <div style={styles.imagePlaceholder}>미리보기 준비 중...</div>
-              )}
-            </div>
-          );
-        })}
-      </div>
+              >
+                <div style={styles.imageFrame(meta.isWide)}>
+                  {isSelected && (
+                    <div style={styles.orderBadge}>{selectionOrder + 1}</div>
+                  )}
+                  {preview ? (
+                    <img
+                      src={preview}
+                      style={styles.previewImage}
+                      alt={`촬영 이미지 ${index + 1}`}
+                    />
+                  ) : (
+                    <div style={styles.imagePlaceholder}>미리보기 준비 중...</div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
 
         {composeError && <div style={styles.errorText}>{composeError}</div>}
       </div>
