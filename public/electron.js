@@ -1,7 +1,6 @@
 const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
-const isDev = require('electron-is-dev');
 const sharp = require('sharp');
 const printer = require('node-printer');
 
@@ -17,6 +16,7 @@ function createWindow() {
     },
   });
 
+  const isDev = !app.isPackaged;
   if (isDev) {
     win.loadURL('http://localhost:3000');
   } else {
