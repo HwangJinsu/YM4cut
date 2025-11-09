@@ -1,6 +1,5 @@
 const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
-const { pathToFileURL } = require('url');
 const fs = require('fs');
 const sharp = require('sharp');
 
@@ -146,6 +145,22 @@ async function resolvePrinterName(preferredName) {
     return defaultPrinter.name;
   }
   return printers[0]?.name || null;
+}
+
+function createImageDataUrl(imagePath) {
+  const extension = path.extname(imagePath).toLowerCase();
+  const mimeMap = {
+    '.png': 'image/png',
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.bmp': 'image/bmp',
+    '.gif': 'image/gif',
+    '.webp': 'image/webp',
+  };
+  const mimeType = mimeMap[extension] || 'image/png';
+  const imageBuffer = fs.readFileSync(imagePath);
+  const base64 = imageBuffer.toString('base64');
+  return `data:${mimeType};base64,${base64}`;
 }
 
 ipcMain.handle('get-printers', async () => enumeratePrinters());
@@ -296,8 +311,16 @@ ipcMain.handle('print-image', async (event, { imagePath, printerName }) => {
   });
 
   const tryBrowserPrint = () => new Promise((resolve, reject) => {
+    let dataUrl;
+    try {
+      dataUrl = createImageDataUrl(imagePath);
+    } catch (fileError) {
+      return reject(new Error(`인쇄 이미지를 불러오지 못했습니다: ${fileError.message}`));
+    }
+
     const printWindow = new BrowserWindow({
       show: false,
+      backgroundColor: '#ffffff',
       webPreferences: { offscreen: true },
     });
 
@@ -307,11 +330,29 @@ ipcMain.handle('print-image', async (event, { imagePath, printerName }) => {
       }
     };
 
-    const imageUrl = pathToFileURL(imagePath).toString();
     const html = `
       <html>
-        <body style="margin:0;display:flex;justify-content:center;align-items:center;background:#fff;">
-          <img src="${imageUrl}" style="max-width:100%;max-height:100%;object-fit:contain;" />
+        <head>
+          <style>
+            @page { margin: 0; }
+            html, body {
+              margin: 0;
+              height: 100%;
+              width: 100%;
+              display: flex;
+              justify-content: center;
+              align-items: center;
+              background: #fff;
+            }
+            img {
+              max-width: 100%;
+              max-height: 100%;
+              object-fit: contain;
+            }
+          </style>
+        </head>
+        <body>
+          <img src="${dataUrl}" />
         </body>
       </html>
     `;
@@ -323,6 +364,8 @@ ipcMain.handle('print-image', async (event, { imagePath, printerName }) => {
           silent: true,
           deviceName: targetPrinter,
           printBackground: true,
+          margins: { marginType: 'none' },
+          scaleFactor: 100,
         },
         (success, failureReason) => {
           cleanup();
