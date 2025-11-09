@@ -12,6 +12,10 @@ type ImageMeta = {
 };
 
 const MAX_SELECTION = 4;
+const DEFAULT_ZOOM = 1.3;
+const ZOOM_MIN = 0.8;
+const ZOOM_MAX = 2;
+const ZOOM_STEP = 0.1;
 
 const Compose: React.FC = () => {
   const location = useLocation();
@@ -41,6 +45,7 @@ const Compose: React.FC = () => {
   const [finalImage, setFinalImage] = useState<string | null>(null);
   const [composeError, setComposeError] = useState<string | null>(null);
   const lastSelectionKey = useRef<string>('');
+  const [zoom, setZoom] = useState<number>(DEFAULT_ZOOM);
 
   useEffect(() => {
     let isActive = true;
@@ -156,6 +161,19 @@ const Compose: React.FC = () => {
   const isPrintDisabled =
     selectedIndexes.length !== MAX_SELECTION || composing || !finalImage;
 
+  const isEightView = allImages.length > MAX_SELECTION;
+  const columns = isEightView ? 4 : 2;
+  const baseWidth = 280 * (isEightView ? 1 : 1.2);
+  const scaledWidth = Math.round(baseWidth * zoom);
+
+  const clampZoom = (value: number) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, parseFloat(value.toFixed(2))));
+  const handleZoomChange = (delta: number) => {
+    setZoom(prev => clampZoom(prev + delta));
+  };
+  const zoomDisplay = `${Math.round(zoom * 100)}%`;
+  const canZoomOut = zoom > ZOOM_MIN + 0.001;
+  const canZoomIn = zoom < ZOOM_MAX - 0.001;
+
   const styles = {
     container: {
       position: 'relative' as const,
@@ -191,17 +209,40 @@ const Compose: React.FC = () => {
       fontWeight: 600,
       marginBottom: '24px',
     },
-    imageGrid: (columns: number) => ({
+    zoomControls: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: '12px',
+      marginBottom: '20px',
+    },
+    zoomButton: {
+      width: '64px',
+      height: '64px',
+      borderRadius: '50%',
+      border: 'none',
+      backgroundColor: 'var(--secondary-color)',
+      color: '#fff',
+      fontSize: '28px',
+      cursor: 'pointer',
+      boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+      transition: 'transform 0.2s ease-out, opacity 0.2s ease-out',
+    },
+    zoomLabel: {
+      fontSize: 'var(--body-font-size)',
+      minWidth: '140px',
+      textAlign: 'center' as const,
+    },
+    imageGrid: {
       display: 'grid',
-      gridTemplateColumns: `repeat(${columns}, minmax(260px, 1fr))`,
+      gridTemplateColumns: `repeat(${columns}, minmax(${scaledWidth}px, 1fr))`,
       gap: '28px',
       width: '100%',
       maxWidth: '1400px',
-    }),
+    },
     imageCard: {
       position: 'relative' as const,
       borderRadius: '18px',
-      overflow: 'hidden' as const,
+      overflow: 'visible' as const,
       boxShadow: '0 8px 24px rgba(0,0,0,0.18)',
       cursor: 'pointer',
       border: '5px solid transparent',
@@ -217,15 +258,13 @@ const Compose: React.FC = () => {
     },
     imageFrame: (ratio: number) => ({
       position: 'relative' as const,
-      width: '100%',
-      maxWidth: '520px',
+      width: `${scaledWidth}px`,
+      maxWidth: '100%',
       aspectRatio: ratio || 3 / 4,
       backgroundColor: '#fff',
       borderRadius: '12px',
       overflow: 'hidden' as const,
       boxShadow: '0 6px 18px rgba(0,0,0,0.15)',
-      transform: 'scale(1.3)',
-      transformOrigin: 'center',
     }),
     orderBadge: {
       position: 'absolute' as const,
@@ -329,12 +368,44 @@ const Compose: React.FC = () => {
           {allImages.length > MAX_SELECTION ? '8컷 미리보기' : '4컷 미리보기'}
         </div>
 
-        <div style={styles.imageGrid(allImages.length > MAX_SELECTION ? 4 : 2)}>
+        <div style={styles.zoomControls}>
+          <button
+            style={{
+              ...styles.zoomButton,
+              opacity: canZoomOut ? 1 : 0.4,
+              cursor: canZoomOut ? 'pointer' : 'not-allowed',
+            }}
+            onClick={() => handleZoomChange(-ZOOM_STEP)}
+            disabled={!canZoomOut}
+            aria-label="축소"
+          >
+            −
+          </button>
+          <span style={styles.zoomLabel}>확대 {zoomDisplay}</span>
+          <button
+            style={{
+              ...styles.zoomButton,
+              opacity: canZoomIn ? 1 : 0.4,
+              cursor: canZoomIn ? 'pointer' : 'not-allowed',
+            }}
+            onClick={() => handleZoomChange(ZOOM_STEP)}
+            disabled={!canZoomIn}
+            aria-label="확대"
+          >
+            +
+          </button>
+        </div>
+
+        <div style={styles.imageGrid}>
           {allImages.map((imagePath, index) => {
             const meta = imageMeta[index] ?? { src: '', aspectRatio: 3 / 4 };
             const preview = meta.src;
             const selectionOrder = selectedIndexes.indexOf(index);
             const isSelected = selectionOrder !== -1;
+            const ratio =
+              Number.isFinite(meta.aspectRatio) && meta.aspectRatio > 0
+                ? meta.aspectRatio
+                : 3 / 4;
             return (
               <div
               key={imagePath}
@@ -353,7 +424,7 @@ const Compose: React.FC = () => {
                 }
               }}
               >
-                <div style={styles.imageFrame(meta.aspectRatio)}>
+                <div style={styles.imageFrame(ratio)}>
                   {isSelected && (
                     <div style={styles.orderBadge}>{selectionOrder + 1}</div>
                   )}

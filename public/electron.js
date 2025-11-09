@@ -100,6 +100,7 @@ async function enumeratePrinters() {
           displayName: name,
           isDefault: false,
           source: 'node-printer',
+          status: null,
         });
       });
     } catch (nativeError) {
@@ -125,6 +126,7 @@ async function enumeratePrinters() {
           displayName: device.displayName || device.description || existing.displayName || name,
           isDefault: device.isDefault ?? existing.isDefault ?? false,
           source: existing.source || 'webContents',
+          status: typeof device.status === 'number' ? device.status : existing.status ?? null,
         });
       });
     }
@@ -145,6 +147,39 @@ async function resolvePrinterName(preferredName) {
     return defaultPrinter.name;
   }
   return printers[0]?.name || null;
+}
+
+const PRINTER_STATUS_OFFLINE = 0x00000080;
+const PRINTER_STATUS_ERROR = 0x00000002;
+const PRINTER_STATUS_NOT_AVAILABLE = 0x00001000;
+
+const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+function isPrinterReady(device) {
+  if (!device) return false;
+  if (device.source === 'node-printer') return true;
+  if (typeof device.status !== 'number') return true;
+  return (
+    (device.status & PRINTER_STATUS_OFFLINE) === 0 &&
+    (device.status & PRINTER_STATUS_ERROR) === 0 &&
+    (device.status & PRINTER_STATUS_NOT_AVAILABLE) === 0
+  );
+}
+
+async function waitUntilPrinterReady(targetPrinter, attempts = 5) {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const devices = await enumeratePrinters();
+    const device = devices.find(d => d.name === targetPrinter);
+    if (!device) {
+      await delay(1000);
+      continue;
+    }
+    if (isPrinterReady(device)) {
+      return;
+    }
+    await delay(1000);
+  }
+  throw new Error('선택한 프린터가 준비되지 않았습니다. 연결 상태를 확인한 뒤 다시 시도해주세요.');
 }
 
 function createImageDataUrl(imagePath) {
@@ -292,6 +327,8 @@ ipcMain.handle('print-image', async (event, { imagePath, printerName }) => {
     throw new Error('프린터를 찾을 수 없습니다. 시스템에 프린터가 설치되어 있는지 확인해주세요.');
   }
 
+  await waitUntilPrinterReady(targetPrinter);
+
   const tryNativePrint = () => new Promise((resolve, reject) => {
     try {
       const Printer = PrinterModule;
@@ -384,16 +421,26 @@ ipcMain.handle('print-image', async (event, { imagePath, printerName }) => {
     });
   });
 
+  let lastError = null;
   if (PrinterModule && process.platform !== 'win32') {
     try {
       await tryNativePrint();
       return;
     } catch (nativeError) {
+      lastError = nativeError;
       console.warn('Native print failed, attempting browser fallback:', nativeError);
     }
   }
 
-  await tryBrowserPrint();
+  try {
+    await tryBrowserPrint();
+  } catch (browserError) {
+    if (lastError) {
+      console.error('Fallback print error:', browserError);
+      throw lastError;
+    }
+    throw browserError;
+  }
 });
 
 ipcMain.handle('quit-app', async () => {

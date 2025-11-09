@@ -12,6 +12,7 @@ const Camera: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const baseImagesRef = useRef<string[]>([]);
+  const [shutterInterval, setShutterInterval] = useState<number>(5);
 
   const styles = {
     container: {
@@ -126,6 +127,9 @@ const Camera: React.FC = () => {
         if (settings.isCameraFlipped) {
           setIsFlipped(true);
         }
+        if (settings.shutterTimer) {
+          setShutterInterval(Math.min(10, Math.max(5, parseInt(settings.shutterTimer, 10))));
+        }
         const videoConstraints: MediaStreamConstraints['video'] = {};
         if (settings.selectedCamera) {
           videoConstraints.deviceId = { exact: settings.selectedCamera };
@@ -185,8 +189,9 @@ const Camera: React.FC = () => {
 
   const startCaptureSequence = () => {
     let captureCount = 0;
+    const intervalSeconds = Math.min(10, Math.max(5, Math.round(shutterInterval)));
     const sequence = () => {
-      let count = 5;
+      let count = intervalSeconds;
       const countdownInterval = setInterval(() => {
         setCountdown(count);
         count -= 1;
@@ -196,7 +201,7 @@ const Camera: React.FC = () => {
           capture();
           captureCount += 1;
           if (captureCount < 4) {
-            setTimeout(sequence, 5000);
+            setTimeout(sequence, intervalSeconds * 1000);
           }
         }
       }, 1000);

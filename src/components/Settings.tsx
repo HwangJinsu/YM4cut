@@ -17,6 +17,7 @@ const Settings: React.FC = () => {
   const [contrast, setContrast] = useState<number>(1);
   const [saturation, setSaturation] = useState<number>(1.1);
   const [isCameraFlipped, setIsCameraFlipped] = useState<boolean>(false);
+  const [shutterTimer, setShutterTimer] = useState<number>(5);
 
   useEffect(() => {
     const fetchDevicesAndSettings = async () => {
@@ -52,6 +53,9 @@ const Settings: React.FC = () => {
       }
       if (settings.isCameraFlipped) {
         setIsCameraFlipped(settings.isCameraFlipped);
+      }
+      if (settings.shutterTimer) {
+        setShutterTimer(Number(settings.shutterTimer));
       }
 
       // Fetch cameras
@@ -128,6 +132,16 @@ const Settings: React.FC = () => {
       display: 'flex',
       flexDirection: 'column' as 'column',
       marginTop: '10px',
+    },
+    sliderInline: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: '16px',
+      marginTop: '16px',
+    },
+    sliderValue: {
+      fontSize: '22px',
+      minWidth: '80px',
     },
     sliderLabel: {
       fontSize: '20px',
@@ -225,6 +239,7 @@ const Settings: React.FC = () => {
       contrast,
       saturation,
       isCameraFlipped,
+      shutterTimer,
     };
     await window.electron.saveSettings(newSettings);
     alert('설정이 저장되었습니다!');
@@ -299,6 +314,19 @@ const Settings: React.FC = () => {
             style={styles.checkbox}
           />
           <label htmlFor="cameraFlip" style={styles.sliderLabel}>카메라 좌우반전</label>
+        </div>
+        <div style={styles.sliderInline}>
+          <label style={styles.sliderLabel}>셔터 타이머</label>
+          <input
+            type="range"
+            min="5"
+            max="10"
+            step="1"
+            value={shutterTimer}
+            onChange={e => setShutterTimer(parseInt(e.target.value, 10))}
+            style={{ ...styles.slider, maxWidth: '280px' }}
+          />
+          <span style={styles.sliderValue}>{shutterTimer}초</span>
         </div>
       </div>
 
