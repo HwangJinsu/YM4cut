@@ -306,7 +306,7 @@ const Compose: React.FC = () => {
     },
     buttonRow: {
       position: 'absolute' as const,
-      top: '75%',
+      top: '78%',
       left: '50%',
       transform: 'translate(-50%, -50%)',
       display: 'flex',
@@ -335,7 +335,7 @@ const Compose: React.FC = () => {
     },
     statusMessage: {
       position: 'absolute' as const,
-      top: '88%',
+      top: '90%',
       left: '50%',
       transform: 'translateX(-50%)',
       fontSize: 'var(--body-font-size)',

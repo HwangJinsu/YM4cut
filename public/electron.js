@@ -153,33 +153,26 @@ const PRINTER_STATUS_OFFLINE = 0x00000080;
 const PRINTER_STATUS_ERROR = 0x00000002;
 const PRINTER_STATUS_NOT_AVAILABLE = 0x00001000;
 
-const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
-
-function isPrinterReady(device) {
-  if (!device) return false;
-  if (device.source === 'node-printer') return true;
-  if (typeof device.status !== 'number') return true;
-  return (
-    (device.status & PRINTER_STATUS_OFFLINE) === 0 &&
-    (device.status & PRINTER_STATUS_ERROR) === 0 &&
-    (device.status & PRINTER_STATUS_NOT_AVAILABLE) === 0
-  );
+function getPrinterStatusDescription(status) {
+  if (status == null) return null;
+  if (status & PRINTER_STATUS_OFFLINE) return '프린터가 오프라인 상태입니다.';
+  if (status & PRINTER_STATUS_ERROR) return '프린터에 오류가 발생했습니다.';
+  if (status & PRINTER_STATUS_NOT_AVAILABLE) return '프린터를 사용할 수 없습니다.';
+  return null;
 }
 
-async function waitUntilPrinterReady(targetPrinter, attempts = 5) {
-  for (let attempt = 0; attempt < attempts; attempt += 1) {
-    const devices = await enumeratePrinters();
-    const device = devices.find(d => d.name === targetPrinter);
-    if (!device) {
-      await delay(1000);
-      continue;
-    }
-    if (isPrinterReady(device)) {
-      return;
-    }
-    await delay(1000);
+async function ensurePrinterAvailable(targetPrinter) {
+  const devices = await enumeratePrinters();
+  const device = devices.find(d => d.name === targetPrinter);
+  if (!device) {
+    throw new Error('선택한 프린터를 찾을 수 없습니다. 연결 상태와 드라이버를 확인해주세요.');
   }
-  throw new Error('선택한 프린터가 준비되지 않았습니다. 연결 상태를 확인한 뒤 다시 시도해주세요.');
+  if (typeof device.status === 'number') {
+    const description = getPrinterStatusDescription(device.status);
+    if (description) {
+      throw new Error(description);
+    }
+  }
 }
 
 function createImageDataUrl(imagePath) {
@@ -327,7 +320,7 @@ ipcMain.handle('print-image', async (event, { imagePath, printerName }) => {
     throw new Error('프린터를 찾을 수 없습니다. 시스템에 프린터가 설치되어 있는지 확인해주세요.');
   }
 
-  await waitUntilPrinterReady(targetPrinter);
+  await ensurePrinterAvailable(targetPrinter);
 
   const tryNativePrint = () => new Promise((resolve, reject) => {
     try {
