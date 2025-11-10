@@ -49,7 +49,7 @@ function createWindow() {
   }
 }
 
-async function prepareImageForPrint(imagePath) {
+async function preparePdfForPrint(imagePath) {
   const desiredLongPx = PRINT_LONG_INCHES * PRINT_DPI;
   const desiredShortPx = PRINT_SHORT_INCHES * PRINT_DPI;
   const metadata = await sharp(imagePath).metadata();
@@ -66,7 +66,7 @@ async function prepareImageForPrint(imagePath) {
     targetHeight,
   });
 
-  const buffer = await sharp(imagePath)
+  const imageBuffer = await sharp(imagePath)
     .rotate()
     .resize({
       width: targetWidth,
@@ -77,17 +77,61 @@ async function prepareImageForPrint(imagePath) {
     .png()
     .toBuffer();
 
-  const base64 = buffer.toString('base64');
-  const pageSize = {
-    width: Math.round((landscape ? PRINT_LONG_INCHES : PRINT_SHORT_INCHES) * MICRONS_PER_INCH),
-    height: Math.round((landscape ? PRINT_SHORT_INCHES : PRINT_LONG_INCHES) * MICRONS_PER_INCH),
-  };
+  const pageWidthMicrons = Math.round((landscape ? PRINT_LONG_INCHES : PRINT_SHORT_INCHES) * MICRONS_PER_INCH);
+  const pageHeightMicrons = Math.round((landscape ? PRINT_SHORT_INCHES : PRINT_LONG_INCHES) * MICRONS_PER_INCH);
 
-  return {
-    dataUrl: `data:image/png;base64,${base64}`,
-    pageSize,
+  const previewWindow = new BrowserWindow({
+    show: false,
+    webPreferences: { offscreen: true },
+    backgroundColor: '#ffffff',
+  });
+
+  const imageDataUrl = `data:image/png;base64,${imageBuffer.toString('base64')}`;
+  const html = `
+    <html>
+      <head>
+        <style>
+          @page { size: ${PRINT_LONG_INCHES}in ${PRINT_SHORT_INCHES}in; margin: 0; }
+          html, body {
+            margin: 0;
+            height: 100%;
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: #fff;
+          }
+          img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+          }
+        </style>
+      </head>
+      <body>
+        <img src="${imageDataUrl}" />
+      </body>
+    </html>
+  `;
+
+  await previewWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+  console.log('[print-image] Generating PDF via printToPDF');
+  const pdfBuffer = await previewWindow.webContents.printToPDF({
     landscape,
-  };
+    margins: { marginType: 'none' },
+    pageSize: { width: pageWidthMicrons, height: pageHeightMicrons },
+    printBackground: true,
+    scale: 1,
+  });
+  if (!previewWindow.isDestroyed()) {
+    previewWindow.close();
+  }
+
+  const tempPath = path.join(app.getPath('temp'), `ym4cut_print_${Date.now()}.pdf`);
+  fs.writeFileSync(tempPath, pdfBuffer);
+  console.log('[print-image] PDF written', tempPath, 'bytes', pdfBuffer.length);
+
+  return { pdfPath: tempPath, pageSize: { width: pageWidthMicrons, height: pageHeightMicrons }, landscape };
 }
 
 app.whenReady().then(() => {
@@ -396,10 +440,10 @@ ipcMain.handle('print-image', async (event, { imagePath, printerName }) => {
   });
 
   const tryBrowserPrint = () => new Promise((resolve, reject) => {
-    prepareImageForPrint(imagePath)
+    preparePdfForPrint(imagePath)
       .then(prepared => {
-        const { dataUrl, pageSize, landscape } = prepared;
-        console.log('[print-image] Prepared print payload', { pageSize, landscape });
+        const { pdfPath, pageSize, landscape } = prepared;
+        console.log('[print-image] Prepared PDF payload', { pdfPath, pageSize, landscape });
 
         const printWindow = new BrowserWindow({
           show: false,
@@ -413,36 +457,10 @@ ipcMain.handle('print-image', async (event, { imagePath, printerName }) => {
           }
         };
 
-        const html = `
-          <html>
-            <head>
-              <style>
-                @page { margin: 0; }
-                html, body {
-                  margin: 0;
-                  height: 100%;
-                  width: 100%;
-                  display: flex;
-                  justify-content: center;
-                  align-items: center;
-                  background: #fff;
-                }
-                img {
-                  max-width: 100%;
-                  max-height: 100%;
-                  object-fit: contain;
-                }
-              </style>
-            </head>
-            <body>
-              <img src="${dataUrl}" />
-            </body>
-          </html>
-        `;
-        printWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+        printWindow.loadURL(pathToFileURL(pdfPath).toString());
 
         printWindow.webContents.on('did-start-loading', () => {
-          console.log('[print-image] BrowserWindow started loading content');
+          console.log('[print-image] BrowserWindow started loading PDF');
         });
 
         const submitPrint = () => {
@@ -460,6 +478,13 @@ ipcMain.handle('print-image', async (event, { imagePath, printerName }) => {
             },
             (success, failureReason) => {
               cleanup();
+              try {
+                if (fs.existsSync(pdfPath)) {
+                  fs.unlinkSync(pdfPath);
+                }
+              } catch (unlinkErr) {
+                console.warn('[print-image] Failed to delete temp PDF', unlinkErr);
+              }
               if (success) {
                 console.log('[print-image] Browser print job forwarded to printer');
                 resolve();
