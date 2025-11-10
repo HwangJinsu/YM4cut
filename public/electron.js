@@ -80,13 +80,17 @@ async function preparePdfForPrint(imagePath) {
   const pageWidthMicrons = Math.round((landscape ? PRINT_LONG_INCHES : PRINT_SHORT_INCHES) * MICRONS_PER_INCH);
   const pageHeightMicrons = Math.round((landscape ? PRINT_SHORT_INCHES : PRINT_LONG_INCHES) * MICRONS_PER_INCH);
 
+  const imageTempPath = path.join(app.getPath('temp'), `ym4cut_image_${Date.now()}.png`);
+  fs.writeFileSync(imageTempPath, imageBuffer);
+  console.log('[print-image] Temp image written', imageTempPath, 'bytes', imageBuffer.length);
+
   const previewWindow = new BrowserWindow({
     show: false,
     webPreferences: { offscreen: true },
     backgroundColor: '#ffffff',
   });
 
-  const imageDataUrl = `data:image/png;base64,${imageBuffer.toString('base64')}`;
+  const imageFileUrl = pathToFileURL(imageTempPath).toString();
   const html = `
     <html>
       <head>
@@ -109,7 +113,7 @@ async function preparePdfForPrint(imagePath) {
         </style>
       </head>
       <body>
-        <img src="${imageDataUrl}" />
+        <img src="${imageFileUrl}" />
       </body>
     </html>
   `;
@@ -130,6 +134,12 @@ async function preparePdfForPrint(imagePath) {
   const tempPath = path.join(app.getPath('temp'), `ym4cut_print_${Date.now()}.pdf`);
   fs.writeFileSync(tempPath, pdfBuffer);
   console.log('[print-image] PDF written', tempPath, 'bytes', pdfBuffer.length);
+
+  try {
+    fs.unlinkSync(imageTempPath);
+  } catch (err) {
+    console.warn('[print-image] Failed to delete temp image', err);
+  }
 
   return { pdfPath: tempPath, pageSize: { width: pageWidthMicrons, height: pageHeightMicrons }, landscape };
 }
