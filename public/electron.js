@@ -504,6 +504,14 @@ ipcMain.handle('print-image', async (event, { imagePath, printerName }) => {
           console.log('[print-image][window]', level, message);
         });
 
+        printWindow.webContents.on('ipc-message', (_event, channel, args) => {
+          console.log('[print-image][window][ipc]', channel, args);
+        });
+
+        printWindow.webContents.on('did-finish-load', () => {
+          console.log('[print-image] did-finish-load (additional listener) fired');
+        });
+
         printWindow.on('unresponsive', () => {
           console.error('[print-image] BrowserWindow became unresponsive during print');
         });
