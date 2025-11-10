@@ -396,121 +396,121 @@ ipcMain.handle('print-image', async (event, { imagePath, printerName }) => {
   });
 
   const tryBrowserPrint = () => new Promise((resolve, reject) => {
-    let prepared;
-    try {
-      prepared = await prepareImageForPrint(imagePath);
-    } catch (fileError) {
-      return reject(new Error(`인쇄 이미지를 준비하는 중 오류가 발생했습니다: ${fileError.message}`));
-    }
-    const { dataUrl, pageSize, landscape } = prepared;
-    console.log('[print-image] Prepared print payload', { pageSize, landscape });
+    prepareImageForPrint(imagePath)
+      .then(prepared => {
+        const { dataUrl, pageSize, landscape } = prepared;
+        console.log('[print-image] Prepared print payload', { pageSize, landscape });
 
-    const printWindow = new BrowserWindow({
-      show: false,
-      backgroundColor: '#ffffff',
-      webPreferences: { offscreen: true },
-    });
+        const printWindow = new BrowserWindow({
+          show: false,
+          backgroundColor: '#ffffff',
+          webPreferences: { offscreen: true },
+        });
 
-    const cleanup = () => {
-      if (!printWindow.isDestroyed()) {
-        printWindow.close();
-      }
-    };
-
-    const html = `
-      <html>
-        <head>
-          <style>
-            @page { margin: 0; }
-            html, body {
-              margin: 0;
-              height: 100%;
-              width: 100%;
-              display: flex;
-              justify-content: center;
-              align-items: center;
-              background: #fff;
-            }
-            img {
-              max-width: 100%;
-              max-height: 100%;
-              object-fit: contain;
-            }
-          </style>
-        </head>
-        <body>
-          <img src="${dataUrl}" />
-        </body>
-      </html>
-    `;
-    printWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
-
-    printWindow.webContents.on('did-start-loading', () => {
-      console.log('[print-image] BrowserWindow started loading content');
-    });
-
-    const submitPrint = () => {
-      console.log('[print-image] Submitting print job via webContents.print');
-      printWindow.webContents.print(
-        {
-          silent: true,
-          deviceName: targetPrinter,
-          printBackground: true,
-          margins: { marginType: 'none' },
-          scaleFactor: 100,
-          pageSize,
-          landscape,
-          dpi: { horizontal: PRINT_DPI, vertical: PRINT_DPI },
-        },
-        (success, failureReason) => {
-          cleanup();
-          if (success) {
-            console.log('[print-image] Browser print job forwarded to printer');
-            resolve();
-          } else {
-            console.error('[print-image] Browser print failed', failureReason);
-            reject(new Error(failureReason || '인쇄에 실패했습니다.'));
+        const cleanup = () => {
+          if (!printWindow.isDestroyed()) {
+            printWindow.close();
           }
-        }
-      );
-    };
+        };
 
-    const loadTimeout = setTimeout(() => {
-      console.warn('[print-image] BrowserWindow load timeout, forcing print');
-      submitPrint();
-    }, 3000);
+        const html = `
+          <html>
+            <head>
+              <style>
+                @page { margin: 0; }
+                html, body {
+                  margin: 0;
+                  height: 100%;
+                  width: 100%;
+                  display: flex;
+                  justify-content: center;
+                  align-items: center;
+                  background: #fff;
+                }
+                img {
+                  max-width: 100%;
+                  max-height: 100%;
+                  object-fit: contain;
+                }
+              </style>
+            </head>
+            <body>
+              <img src="${dataUrl}" />
+            </body>
+          </html>
+        `;
+        printWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
 
-    printWindow.webContents.once('did-finish-load', () => {
-      clearTimeout(loadTimeout);
-      console.log('[print-image] BrowserWindow load finished, invoking print');
-      submitPrint();
-    });
+        printWindow.webContents.on('did-start-loading', () => {
+          console.log('[print-image] BrowserWindow started loading content');
+        });
 
-    printWindow.webContents.on('did-stop-loading', () => {
-      console.log('[print-image] BrowserWindow stop loading');
-    });
+        const submitPrint = () => {
+          console.log('[print-image] Submitting print job via webContents.print', { pageSize, landscape });
+          printWindow.webContents.print(
+            {
+              silent: true,
+              deviceName: targetPrinter,
+              printBackground: true,
+              margins: { marginType: 'none' },
+              scaleFactor: 100,
+              pageSize,
+              landscape,
+              dpi: { horizontal: PRINT_DPI, vertical: PRINT_DPI },
+            },
+            (success, failureReason) => {
+              cleanup();
+              if (success) {
+                console.log('[print-image] Browser print job forwarded to printer');
+                resolve();
+              } else {
+                console.error('[print-image] Browser print failed', failureReason);
+                reject(new Error(failureReason || '인쇄에 실패했습니다.'));
+              }
+            }
+          );
+        };
 
-    printWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
-      clearTimeout(loadTimeout);
-      console.error('[print-image] BrowserWindow failed to load', { errorCode, errorDescription });
-      cleanup();
-      reject(new Error(`인쇄 미리보기 로드 실패: ${errorDescription || errorCode}`));
-    });
+        const loadTimeout = setTimeout(() => {
+          console.warn('[print-image] BrowserWindow load timeout, forcing print');
+          submitPrint();
+        }, 3000);
 
-    printWindow.webContents.on('render-process-gone', (_event, details) => {
-      clearTimeout(loadTimeout);
-      console.error('[print-image] Render process gone during print', details);
-      cleanup();
-      reject(new Error('인쇄용 렌더러가 종료되었습니다.'));
-    });
+        printWindow.webContents.once('did-finish-load', () => {
+          clearTimeout(loadTimeout);
+          console.log('[print-image] BrowserWindow load finished, invoking print');
+          submitPrint();
+        });
 
-    printWindow.webContents.on('console-message', (_event, level, message) => {
-      console.log('[print-image][window]', level, message);
-    });
+        printWindow.webContents.on('did-stop-loading', () => {
+          console.log('[print-image] BrowserWindow stop loading');
+        });
 
-    printWindow.on('unresponsive', () => {
-      console.error('[print-image] BrowserWindow became unresponsive during print');
-    });
+        printWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
+          clearTimeout(loadTimeout);
+          console.error('[print-image] BrowserWindow failed to load', { errorCode, errorDescription });
+          cleanup();
+          reject(new Error(`인쇄 미리보기 로드 실패: ${errorDescription || errorCode}`));
+        });
+
+        printWindow.webContents.on('render-process-gone', (_event, details) => {
+          clearTimeout(loadTimeout);
+          console.error('[print-image] Render process gone during print', details);
+          cleanup();
+          reject(new Error('인쇄용 렌더러가 종료되었습니다.'));
+        });
+
+        printWindow.webContents.on('console-message', (_event, level, message) => {
+          console.log('[print-image][window]', level, message);
+        });
+
+        printWindow.on('unresponsive', () => {
+          console.error('[print-image] BrowserWindow became unresponsive during print');
+        });
+      })
+      .catch(fileError => {
+        reject(new Error(`인쇄 이미지를 준비하는 중 오류가 발생했습니다: ${fileError.message}`));
+      });
   });
 
   let lastError = null;
