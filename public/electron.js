@@ -394,26 +394,25 @@ ipcMain.handle('print-image', async (event, { imagePath, printerName }) => {
     `;
     printWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
 
-    printWindow.webContents.once('did-finish-load', async () => {
-      try {
-        const success = await printWindow.webContents.print({
+    printWindow.webContents.once('did-finish-load', () => {
+      printWindow.webContents.print(
+        {
           silent: true,
           deviceName: targetPrinter,
           printBackground: true,
           margins: { marginType: 'none' },
           scaleFactor: 100,
-        });
-        cleanup();
-        if (success) {
-          console.log('[print-image] Browser print job forwarded to printer');
-          resolve();
-        } else {
-          reject(new Error('인쇄가 취소되었습니다.'));
+        },
+        (success, failureReason) => {
+          cleanup();
+          if (success) {
+            console.log('[print-image] Browser print job forwarded to printer');
+            resolve();
+          } else {
+            reject(new Error(failureReason || '인쇄에 실패했습니다.'));
+          }
         }
-      } catch (err) {
-        cleanup();
-        reject(new Error(err?.message || '인쇄 요청을 보낼 수 없습니다.'));
-      }
+      );
     });
 
     printWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
