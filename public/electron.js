@@ -174,6 +174,7 @@ async function ensurePrinterAvailable(targetPrinter) {
       throw new Error(description);
     }
   }
+  return device;
 }
 
 function createImageDataUrl(imagePath) {
@@ -396,7 +397,12 @@ ipcMain.handle('print-image', async (event, { imagePath, printerName }) => {
     `;
     printWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
 
+    printWindow.webContents.on('did-start-loading', () => {
+      console.log('[print-image] BrowserWindow started loading content');
+    });
+
     printWindow.webContents.once('did-finish-load', () => {
+      console.log('[print-image] BrowserWindow load finished, invoking print');
       printWindow.webContents.print(
         {
           silent: true,
@@ -411,6 +417,7 @@ ipcMain.handle('print-image', async (event, { imagePath, printerName }) => {
             console.log('[print-image] Browser print job forwarded to printer');
             resolve();
           } else {
+            console.error('[print-image] Browser print failed', failureReason);
             reject(new Error(failureReason || '인쇄에 실패했습니다.'));
           }
         }
@@ -418,8 +425,19 @@ ipcMain.handle('print-image', async (event, { imagePath, printerName }) => {
     });
 
     printWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
+      console.error('[print-image] BrowserWindow failed to load', { errorCode, errorDescription });
       cleanup();
       reject(new Error(`인쇄 미리보기 로드 실패: ${errorDescription || errorCode}`));
+    });
+
+    printWindow.webContents.on('render-process-gone', (_event, details) => {
+      console.error('[print-image] Render process gone during print', details);
+      cleanup();
+      reject(new Error('인쇄용 렌더러가 종료되었습니다.'));
+    });
+
+    printWindow.on('unresponsive', () => {
+      console.error('[print-image] BrowserWindow became unresponsive during print');
     });
   });
 

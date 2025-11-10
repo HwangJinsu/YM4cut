@@ -70,6 +70,15 @@ const Settings: React.FC = () => {
     fetchDevicesAndSettings();
   }, []);
 
+  useEffect(() => {
+    const refreshPrinters = async () => {
+      const printerList = await window.electron.getPrinters();
+      setPrinters(printerList);
+    };
+    const interval = setInterval(refreshPrinters, 10000);
+    return () => clearInterval(interval);
+  }, []);
+
   const styles = {
     container: {
       padding: '40px',
