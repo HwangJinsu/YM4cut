@@ -167,6 +167,7 @@ async function ensurePrinterAvailable(targetPrinter) {
   if (!device) {
     throw new Error('선택한 프린터를 찾을 수 없습니다. 연결 상태와 드라이버를 확인해주세요.');
   }
+  console.log('[print-image] Printer status', { name: device.name, status: device.status, source: device.source });
   if (typeof device.status === 'number') {
     const description = getPrinterStatusDescription(device.status);
     if (description) {
@@ -315,12 +316,14 @@ ipcMain.handle('compose-images', async (event, images) => {
 });
 
 ipcMain.handle('print-image', async (event, { imagePath, printerName }) => {
+  console.log('[print-image] Request received', { imagePath, printerName });
   const targetPrinter = await resolvePrinterName(printerName);
   if (!targetPrinter) {
     throw new Error('프린터를 찾을 수 없습니다. 시스템에 프린터가 설치되어 있는지 확인해주세요.');
   }
 
   await ensurePrinterAvailable(targetPrinter);
+  console.log('[print-image] Using printer', targetPrinter);
 
   const tryNativePrint = () => new Promise((resolve, reject) => {
     try {
@@ -334,7 +337,10 @@ ipcMain.handle('print-image', async (event, { imagePath, printerName }) => {
         return reject(new Error('프린터 작업을 시작하지 못했습니다.'));
       }
       job.once('error', err => reject(new Error(err ? err.toString() : '알 수 없는 오류')));
-      job.once('sent', () => resolve());
+      job.once('sent', () => {
+        console.log('[print-image] Native print sent to spooler');
+        resolve();
+      });
     } catch (error) {
       reject(error);
     }
@@ -400,6 +406,7 @@ ipcMain.handle('print-image', async (event, { imagePath, printerName }) => {
         (success, failureReason) => {
           cleanup();
           if (success) {
+            console.log('[print-image] Browser print job forwarded to printer');
             resolve();
           } else {
             reject(new Error(failureReason || '인쇄에 실패했습니다.'));
@@ -427,6 +434,7 @@ ipcMain.handle('print-image', async (event, { imagePath, printerName }) => {
 
   try {
     await tryBrowserPrint();
+    console.log('[print-image] Print request completed');
   } catch (browserError) {
     if (lastError) {
       console.error('Fallback print error:', browserError);
