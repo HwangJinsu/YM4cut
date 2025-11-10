@@ -56,8 +56,9 @@ async function prepareImageForPrint(imagePath) {
   const metadata = await sharp(imagePath).metadata();
   const width = metadata.width || desiredShortPx;
   const height = metadata.height || desiredLongPx;
-  const targetWidth = desiredShortPx;
-  const targetHeight = desiredLongPx;
+  const portrait = height >= width;
+  const targetWidth = portrait ? desiredLongPx : desiredShortPx;
+  const targetHeight = portrait ? desiredShortPx : desiredLongPx;
   console.log('[print-image] Preparing image for print', {
     sourceWidth: width,
     sourceHeight: height,
@@ -76,8 +77,8 @@ async function prepareImageForPrint(imagePath) {
     .png()
     .toBuffer();
 
-  const pageWidthMicrons = Math.round(PRINT_SHORT_INCHES * MICRONS_PER_INCH);
-  const pageHeightMicrons = Math.round(PRINT_LONG_INCHES * MICRONS_PER_INCH);
+  const pageWidthMicrons = Math.round((portrait ? PRINT_LONG_INCHES : PRINT_SHORT_INCHES) * MICRONS_PER_INCH);
+  const pageHeightMicrons = Math.round((portrait ? PRINT_SHORT_INCHES : PRINT_LONG_INCHES) * MICRONS_PER_INCH);
 
   const imageTempPath = path.join(app.getPath('temp'), `ym4cut_image_${Date.now()}.png`);
   fs.writeFileSync(imageTempPath, imageBuffer);
@@ -87,6 +88,7 @@ async function prepareImageForPrint(imagePath) {
     imagePath: imageTempPath,
     pageSize: { width: pageWidthMicrons, height: pageHeightMicrons },
     landscape: false,
+    portrait,
   };
 }
 
@@ -425,16 +427,21 @@ ipcMain.handle('print-image', async (event, { imagePath, printerName }) => {
           }
         };
 
+        const orientationStyle = portrait
+          ? `@page { size: ${PRINT_SHORT_INCHES}in ${PRINT_LONG_INCHES}in; margin: 0; }`
+          : `@page { size: ${PRINT_LONG_INCHES}in ${PRINT_SHORT_INCHES}in; margin: 0; }`;
+        const flexDirection = portrait ? 'column' : 'row';
         const html = `
           <html>
             <head>
               <style>
-                @page { size: ${PRINT_LONG_INCHES}in ${PRINT_SHORT_INCHES}in; margin: 0; }
+                ${orientationStyle}
                 html, body {
                   margin: 0;
                   height: 100%;
                   width: 100%;
                   display: flex;
+                  flex-direction: ${flexDirection};
                   justify-content: center;
                   align-items: center;
                   background: #fff;
