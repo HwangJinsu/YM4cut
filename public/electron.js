@@ -72,8 +72,8 @@ async function prepareImageForPrint(imagePath) {
     .resize({
       width: targetWidth,
       height: targetHeight,
-      fit: sharp.fit.contain,
-      background: { r: 255, g: 255, b: 255, alpha: 1 },
+      fit: sharp.fit.cover,
+      position: sharp.strategy.center,
     })
     .png()
     .toBuffer();
@@ -446,7 +446,7 @@ ipcMain.handle('print-image', async (event, { imagePath, printerName }) => {
                 img {
                   max-width: 100%;
                   max-height: 100%;
-                  object-fit: contain;
+                  object-fit: cover;
                 }
               </style>
             </head>
