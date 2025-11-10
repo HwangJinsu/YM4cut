@@ -56,18 +56,19 @@ async function prepareImageForPrint(imagePath) {
   const metadata = await sharp(imagePath).metadata();
   const width = metadata.width || desiredShortPx;
   const height = metadata.height || desiredLongPx;
-  const portrait = height >= width;
-  const targetWidth = portrait ? desiredLongPx : desiredShortPx;
-  const targetHeight = portrait ? desiredShortPx : desiredLongPx;
+  const shouldRotate = width > height;
+  const targetWidth = desiredShortPx;
+  const targetHeight = desiredLongPx;
   console.log('[print-image] Preparing image for print', {
     sourceWidth: width,
     sourceHeight: height,
     targetWidth,
     targetHeight,
+    rotate: shouldRotate ? 90 : 0,
   });
 
   const imageBuffer = await sharp(imagePath)
-    .rotate()
+    .rotate(shouldRotate ? 90 : 0)
     .resize({
       width: targetWidth,
       height: targetHeight,
@@ -77,8 +78,8 @@ async function prepareImageForPrint(imagePath) {
     .png()
     .toBuffer();
 
-  const pageWidthMicrons = Math.round((portrait ? PRINT_LONG_INCHES : PRINT_SHORT_INCHES) * MICRONS_PER_INCH);
-  const pageHeightMicrons = Math.round((portrait ? PRINT_SHORT_INCHES : PRINT_LONG_INCHES) * MICRONS_PER_INCH);
+  const pageWidthMicrons = Math.round(PRINT_SHORT_INCHES * MICRONS_PER_INCH);
+  const pageHeightMicrons = Math.round(PRINT_LONG_INCHES * MICRONS_PER_INCH);
 
   const imageTempPath = path.join(app.getPath('temp'), `ym4cut_image_${Date.now()}.png`);
   fs.writeFileSync(imageTempPath, imageBuffer);
@@ -88,7 +89,7 @@ async function prepareImageForPrint(imagePath) {
     imagePath: imageTempPath,
     pageSize: { width: pageWidthMicrons, height: pageHeightMicrons },
     landscape: false,
-    portrait,
+    portrait: true,
   };
 }
 
@@ -427,10 +428,7 @@ ipcMain.handle('print-image', async (event, { imagePath, printerName }) => {
           }
         };
 
-        const orientationStyle = portrait
-          ? `@page { size: ${PRINT_SHORT_INCHES}in ${PRINT_LONG_INCHES}in; margin: 0; }`
-          : `@page { size: ${PRINT_LONG_INCHES}in ${PRINT_SHORT_INCHES}in; margin: 0; }`;
-        const flexDirection = portrait ? 'column' : 'row';
+        const orientationStyle = `@page { size: ${PRINT_SHORT_INCHES}in ${PRINT_LONG_INCHES}in; margin: 0; }`;
         const html = `
           <html>
             <head>
@@ -441,7 +439,6 @@ ipcMain.handle('print-image', async (event, { imagePath, printerName }) => {
                   height: 100%;
                   width: 100%;
                   display: flex;
-                  flex-direction: ${flexDirection};
                   justify-content: center;
                   align-items: center;
                   background: #fff;
