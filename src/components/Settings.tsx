@@ -18,19 +18,24 @@ const Settings: React.FC = () => {
   const [saturation, setSaturation] = useState<number>(1.1);
   const [isCameraFlipped, setIsCameraFlipped] = useState<boolean>(false);
   const [shutterTimer, setShutterTimer] = useState<number>(5);
+  const electronAPI = typeof window !== 'undefined' ? window?.electron : undefined;
 
   useEffect(() => {
     const fetchDevicesAndSettings = async () => {
       // Fetch settings
-      const settings = await window.electron.getSettings();
+      if (!electronAPI) {
+        console.warn('[Settings] electron API unavailable; running in browser context');
+        return;
+      }
+      const settings = await electronAPI.getSettings();
       if (settings.mainImage) {
         setMainImage(settings.mainImage);
-        const preview = await window.electron.getImageAsBase64(settings.mainImage);
+        const preview = await electronAPI.getImageAsBase64(settings.mainImage);
         setMainImagePreview(preview);
       }
       if (settings.templateImage) {
         setTemplateImage(settings.templateImage);
-        const preview = await window.electron.getImageAsBase64(settings.templateImage);
+        const preview = await electronAPI.getImageAsBase64(settings.templateImage);
         setTemplateImagePreview(preview);
       }
       if (settings.selectedCamera) {
@@ -64,20 +69,28 @@ const Settings: React.FC = () => {
       setCameras(videoDevices);
 
       // Fetch printers
-      const printerList = await window.electron.getPrinters();
+      const printerList = await electronAPI.getPrinters();
       setPrinters(printerList);
     };
     fetchDevicesAndSettings();
-  }, []);
+  }, [electronAPI]);
 
   useEffect(() => {
     const refreshPrinters = async () => {
-      const printerList = await window.electron.getPrinters();
-      setPrinters(printerList);
+      if (!electronAPI) {
+        return;
+      }
+      try {
+        const printerList = await electronAPI.getPrinters();
+        setPrinters(printerList);
+      } catch (err) {
+        console.warn('[Settings] Failed to refresh printers', err);
+      }
     };
+    refreshPrinters();
     const interval = setInterval(refreshPrinters, 10000);
     return () => clearInterval(interval);
-  }, []);
+  }, [electronAPI]);
 
   const styles = {
     container: {
@@ -191,10 +204,11 @@ const Settings: React.FC = () => {
   };
 
   const handleSelectMainImage = async () => {
-    const path = await window.electron.openFileDialog();
+    if (!electronAPI) return;
+    const path = await electronAPI.openFileDialog();
     if (path) {
       setMainImage(path);
-      const preview = await window.electron.getImageAsBase64(path);
+      const preview = await electronAPI.getImageAsBase64(path);
       setMainImagePreview(preview);
     }
   };
@@ -205,10 +219,11 @@ const Settings: React.FC = () => {
   };
 
   const handleSelectTemplateImage = async () => {
-    const path = await window.electron.openFileDialog();
+    if (!electronAPI) return;
+    const path = await electronAPI.openFileDialog();
     if (path) {
       setTemplateImage(path);
-      const preview = await window.electron.getImageAsBase64(path);
+      const preview = await electronAPI.getImageAsBase64(path);
       setTemplateImagePreview(preview);
     }
   };
@@ -219,18 +234,20 @@ const Settings: React.FC = () => {
   };
 
   const handleSelectOutputPath = async () => {
-    const path = await window.electron.openDirectoryDialog();
+    if (!electronAPI) return;
+    const path = await electronAPI.openDirectoryDialog();
     if (path) {
       setOutputPath(path);
     }
   };
 
   const handleReprint = async () => {
-    const path = await window.electron.openFileDialog();
+    if (!electronAPI) return;
+    const path = await electronAPI.openFileDialog();
     if (path) {
       try {
         console.log('[Settings] Reprint requested', { path, printer: selectedPrinter });
-        await window.electron.printImage({ imagePath: path, printerName: selectedPrinter });
+        await electronAPI.printImage({ imagePath: path, printerName: selectedPrinter });
         alert('인쇄 요청을 보냈습니다.');
       } catch (error: any) {
         alert(`인쇄 실패: ${error.message}`);
@@ -239,6 +256,7 @@ const Settings: React.FC = () => {
   };
 
   const handleSave = async () => {
+    if (!electronAPI) return;
     const newSettings = {
       mainImage,
       templateImage,
@@ -251,7 +269,7 @@ const Settings: React.FC = () => {
       isCameraFlipped,
       shutterTimer,
     };
-    await window.electron.saveSettings(newSettings);
+    await electronAPI.saveSettings(newSettings);
     alert('설정이 저장되었습니다!');
   };
 

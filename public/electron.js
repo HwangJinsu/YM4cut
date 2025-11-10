@@ -1,5 +1,6 @@
 const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
+const { pathToFileURL } = require('url');
 const fs = require('fs');
 const sharp = require('sharp');
 
