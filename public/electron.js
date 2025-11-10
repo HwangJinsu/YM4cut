@@ -56,13 +56,11 @@ async function prepareImageForPrint(imagePath) {
   const metadata = await sharp(imagePath).metadata();
   const width = metadata.width || desiredShortPx;
   const height = metadata.height || desiredLongPx;
-  const landscape = width >= height;
-  const targetWidth = landscape ? desiredLongPx : desiredShortPx;
-  const targetHeight = landscape ? desiredShortPx : desiredLongPx;
+  const targetWidth = desiredShortPx;
+  const targetHeight = desiredLongPx;
   console.log('[print-image] Preparing image for print', {
     sourceWidth: width,
     sourceHeight: height,
-    landscape,
     targetWidth,
     targetHeight,
   });
@@ -78,8 +76,8 @@ async function prepareImageForPrint(imagePath) {
     .png()
     .toBuffer();
 
-  const pageWidthMicrons = Math.round((landscape ? PRINT_LONG_INCHES : PRINT_SHORT_INCHES) * MICRONS_PER_INCH);
-  const pageHeightMicrons = Math.round((landscape ? PRINT_SHORT_INCHES : PRINT_LONG_INCHES) * MICRONS_PER_INCH);
+  const pageWidthMicrons = Math.round(PRINT_SHORT_INCHES * MICRONS_PER_INCH);
+  const pageHeightMicrons = Math.round(PRINT_LONG_INCHES * MICRONS_PER_INCH);
 
   const imageTempPath = path.join(app.getPath('temp'), `ym4cut_image_${Date.now()}.png`);
   fs.writeFileSync(imageTempPath, imageBuffer);
@@ -88,7 +86,7 @@ async function prepareImageForPrint(imagePath) {
   return {
     imagePath: imageTempPath,
     pageSize: { width: pageWidthMicrons, height: pageHeightMicrons },
-    landscape,
+    landscape: false,
   };
 }
 
@@ -477,7 +475,7 @@ ipcMain.handle('print-image', async (event, { imagePath, printerName }) => {
               margins: { marginType: 'none' },
               scaleFactor: 100,
               pageSize,
-              landscape,
+              landscape: false,
               dpi: { horizontal: PRINT_DPI, vertical: PRINT_DPI },
             },
             (success, failureReason) => {
