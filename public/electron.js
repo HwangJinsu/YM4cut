@@ -68,12 +68,12 @@ async function prepareImageForPrint(imagePath) {
   });
 
   const imageBuffer = await sharp(imagePath)
-    .rotate(shouldRotate ? 90 : 0)
+    .rotate(shouldRotate ? 90 : 0, { background: { r: 255, g: 255, b: 255, alpha: 1 } })
     .resize({
       width: targetWidth,
       height: targetHeight,
-      fit: sharp.fit.cover,
-      position: sharp.strategy.center,
+      fit: sharp.fit.contain,
+      background: { r: 255, g: 255, b: 255, alpha: 1 },
     })
     .png()
     .toBuffer();
@@ -429,6 +429,7 @@ ipcMain.handle('print-image', async (event, { imagePath, printerName }) => {
         };
 
         const orientationStyle = `@page { size: ${PRINT_SHORT_INCHES}in ${PRINT_LONG_INCHES}in; margin: 0; }`;
+        const scale = 'scale(1.05)';
         const html = `
           <html>
             <head>
@@ -447,6 +448,8 @@ ipcMain.handle('print-image', async (event, { imagePath, printerName }) => {
                   max-width: 100%;
                   max-height: 100%;
                   object-fit: cover;
+                  transform: ${scale};
+                  transform-origin: center;
                 }
               </style>
             </head>
