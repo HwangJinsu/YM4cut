@@ -3,6 +3,11 @@ const path = require('path');
 const fs = require('fs');
 const sharp = require('sharp');
 
+const PRINT_DPI = 300;
+const PRINT_LONG_INCHES = 6;
+const PRINT_SHORT_INCHES = 4;
+const MICRONS_PER_INCH = 25400;
+
 let PrinterModule;
 try {
   // node-printer offers access to native printers for actual print jobs
@@ -42,6 +47,47 @@ function createWindow() {
     const indexPath = path.join(__dirname, 'index.html');
     mainWindow.loadFile(indexPath);
   }
+}
+
+async function prepareImageForPrint(imagePath) {
+  const desiredLongPx = PRINT_LONG_INCHES * PRINT_DPI;
+  const desiredShortPx = PRINT_SHORT_INCHES * PRINT_DPI;
+  const metadata = await sharp(imagePath).metadata();
+  const width = metadata.width || desiredShortPx;
+  const height = metadata.height || desiredLongPx;
+  const landscape = width >= height;
+  const targetWidth = landscape ? desiredLongPx : desiredShortPx;
+  const targetHeight = landscape ? desiredShortPx : desiredLongPx;
+  console.log('[print-image] Preparing image for print', {
+    sourceWidth: width,
+    sourceHeight: height,
+    landscape,
+    targetWidth,
+    targetHeight,
+  });
+
+  const buffer = await sharp(imagePath)
+    .rotate()
+    .resize({
+      width: targetWidth,
+      height: targetHeight,
+      fit: sharp.fit.contain,
+      background: { r: 255, g: 255, b: 255, alpha: 1 },
+    })
+    .png()
+    .toBuffer();
+
+  const base64 = buffer.toString('base64');
+  const pageSize = {
+    width: Math.round((landscape ? PRINT_LONG_INCHES : PRINT_SHORT_INCHES) * MICRONS_PER_INCH),
+    height: Math.round((landscape ? PRINT_SHORT_INCHES : PRINT_LONG_INCHES) * MICRONS_PER_INCH),
+  };
+
+  return {
+    dataUrl: `data:image/png;base64,${base64}`,
+    pageSize,
+    landscape,
+  };
 }
 
 app.whenReady().then(() => {
@@ -350,12 +396,14 @@ ipcMain.handle('print-image', async (event, { imagePath, printerName }) => {
   });
 
   const tryBrowserPrint = () => new Promise((resolve, reject) => {
-    let dataUrl;
+    let prepared;
     try {
-      dataUrl = createImageDataUrl(imagePath);
+      prepared = await prepareImageForPrint(imagePath);
     } catch (fileError) {
-      return reject(new Error(`인쇄 이미지를 불러오지 못했습니다: ${fileError.message}`));
+      return reject(new Error(`인쇄 이미지를 준비하는 중 오류가 발생했습니다: ${fileError.message}`));
     }
+    const { dataUrl, pageSize, landscape } = prepared;
+    console.log('[print-image] Prepared print payload', { pageSize, landscape });
 
     const printWindow = new BrowserWindow({
       show: false,
@@ -401,8 +449,8 @@ ipcMain.handle('print-image', async (event, { imagePath, printerName }) => {
       console.log('[print-image] BrowserWindow started loading content');
     });
 
-    printWindow.webContents.once('did-finish-load', () => {
-      console.log('[print-image] BrowserWindow load finished, invoking print');
+    const submitPrint = () => {
+      console.log('[print-image] Submitting print job via webContents.print');
       printWindow.webContents.print(
         {
           silent: true,
@@ -410,6 +458,9 @@ ipcMain.handle('print-image', async (event, { imagePath, printerName }) => {
           printBackground: true,
           margins: { marginType: 'none' },
           scaleFactor: 100,
+          pageSize,
+          landscape,
+          dpi: { horizontal: PRINT_DPI, vertical: PRINT_DPI },
         },
         (success, failureReason) => {
           cleanup();
@@ -422,18 +473,39 @@ ipcMain.handle('print-image', async (event, { imagePath, printerName }) => {
           }
         }
       );
+    };
+
+    const loadTimeout = setTimeout(() => {
+      console.warn('[print-image] BrowserWindow load timeout, forcing print');
+      submitPrint();
+    }, 3000);
+
+    printWindow.webContents.once('did-finish-load', () => {
+      clearTimeout(loadTimeout);
+      console.log('[print-image] BrowserWindow load finished, invoking print');
+      submitPrint();
+    });
+
+    printWindow.webContents.on('did-stop-loading', () => {
+      console.log('[print-image] BrowserWindow stop loading');
     });
 
     printWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
+      clearTimeout(loadTimeout);
       console.error('[print-image] BrowserWindow failed to load', { errorCode, errorDescription });
       cleanup();
       reject(new Error(`인쇄 미리보기 로드 실패: ${errorDescription || errorCode}`));
     });
 
     printWindow.webContents.on('render-process-gone', (_event, details) => {
+      clearTimeout(loadTimeout);
       console.error('[print-image] Render process gone during print', details);
       cleanup();
       reject(new Error('인쇄용 렌더러가 종료되었습니다.'));
+    });
+
+    printWindow.webContents.on('console-message', (_event, level, message) => {
+      console.log('[print-image][window]', level, message);
     });
 
     printWindow.on('unresponsive', () => {
