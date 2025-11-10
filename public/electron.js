@@ -187,7 +187,9 @@ function createImageDataUrl(imagePath) {
     '.webp': 'image/webp',
   };
   const mimeType = mimeMap[extension] || 'image/png';
+  console.log('[print-image] Reading file', imagePath, 'as', mimeType);
   const imageBuffer = fs.readFileSync(imagePath);
+  console.log('[print-image] Read bytes', imageBuffer.length);
   const base64 = imageBuffer.toString('base64');
   return `data:${mimeType};base64,${base64}`;
 }

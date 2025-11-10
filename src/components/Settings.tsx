@@ -220,6 +220,7 @@ const Settings: React.FC = () => {
     const path = await window.electron.openFileDialog();
     if (path) {
       try {
+        console.log('[Settings] Reprint requested', { path, printer: selectedPrinter });
         await window.electron.printImage({ imagePath: path, printerName: selectedPrinter });
         alert('인쇄 요청을 보냈습니다.');
       } catch (error: any) {
