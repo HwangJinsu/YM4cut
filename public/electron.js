@@ -400,9 +400,9 @@ ipcMain.handle('print-image', async (event, { imagePath, printerName }) => {
   const tryBrowserPrint = () => new Promise((resolve, reject) => {
     prepareImageForPrint(imagePath)
       .then(prepared => {
-        const { imagePath: preparedImagePath, pageSize, landscape } = prepared;
+        const { imagePath: preparedImagePath, pageSize, landscape, portrait } = prepared;
         const imageFileUrl = pathToFileURL(preparedImagePath).toString();
-        console.log('[print-image] Prepared image payload', { preparedImagePath, pageSize, landscape });
+        console.log('[print-image] Prepared image payload', { preparedImagePath, pageSize, landscape, portrait });
 
         const printWindow = new BrowserWindow({
           show: false,
@@ -473,7 +473,7 @@ ipcMain.handle('print-image', async (event, { imagePath, printerName }) => {
           `);
 
         const submitPrint = () => {
-          console.log('[print-image] Submitting print job via webContents.print', { pageSize, landscape });
+          console.log('[print-image] Submitting print job via webContents.print', { pageSize, landscape, portrait });
           printWindow.webContents.print(
             {
               silent: true,
