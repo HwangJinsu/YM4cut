@@ -190,22 +190,26 @@ const Camera: React.FC = () => {
   const startCaptureSequence = () => {
     let captureCount = 0;
     const intervalSeconds = Math.min(10, Math.max(5, Math.round(shutterInterval)));
+
     const sequence = () => {
       let count = intervalSeconds;
+      setCountdown(count);
       const countdownInterval = setInterval(() => {
-        setCountdown(count);
         count -= 1;
-        if (count < 0) {
+        if (count <= 0) {
           clearInterval(countdownInterval);
           setCountdown(null);
           capture();
           captureCount += 1;
           if (captureCount < 4) {
-            setTimeout(sequence, intervalSeconds * 1000);
+            setTimeout(sequence, 500);
           }
+        } else {
+          setCountdown(count);
         }
       }, 1000);
     };
+
     sequence();
   };
 
