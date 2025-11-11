@@ -16,6 +16,7 @@ const DEFAULT_ZOOM = 1.3;
 const ZOOM_MIN = 0.8;
 const ZOOM_MAX = 2;
 const ZOOM_STEP = 0.1;
+const FINAL_ASPECT_RATIO = 533 / 357;
 
 const Compose: React.FC = () => {
   const location = useLocation();
@@ -39,7 +40,7 @@ const Compose: React.FC = () => {
 
   const [selectedIndexes, setSelectedIndexes] = useState<number[]>(initialSelection);
   const [imageMeta, setImageMeta] = useState<ImageMeta[]>(() =>
-    allImages.map(() => ({ src: '', aspectRatio: 3 / 4 }))
+    allImages.map(() => ({ src: '', aspectRatio: FINAL_ASPECT_RATIO }))
   );
   const [composing, setComposing] = useState<boolean>(initialSelection.length === MAX_SELECTION);
   const [finalImage, setFinalImage] = useState<string | null>(null);
@@ -55,24 +56,24 @@ const Compose: React.FC = () => {
           try {
             const dataUrl = await window.electron.getImageAsBase64(imagePath);
             if (!dataUrl) {
-              return { src: '', aspectRatio: 3 / 4 };
+              return { src: '', aspectRatio: FINAL_ASPECT_RATIO };
             }
             const ratio = await new Promise<number>(resolve => {
               const img = new Image();
               img.onload = () => {
                 if (img.height === 0) {
-                  resolve(3 / 4);
+                  resolve(FINAL_ASPECT_RATIO);
                 } else {
                   resolve(img.width / img.height);
                 }
               };
-              img.onerror = () => resolve(3 / 4);
+              img.onerror = () => resolve(FINAL_ASPECT_RATIO);
               img.src = dataUrl;
             });
             return { src: dataUrl, aspectRatio: ratio };
           } catch (error) {
             console.error('Failed to load preview:', error);
-            return { src: '', aspectRatio: 3 / 4 };
+            return { src: '', aspectRatio: FINAL_ASPECT_RATIO };
           }
         })
       );
@@ -260,7 +261,7 @@ const Compose: React.FC = () => {
       position: 'relative' as const,
       width: `${scaledWidth}px`,
       maxWidth: '100%',
-      aspectRatio: ratio || 3 / 4,
+      aspectRatio: ratio || FINAL_ASPECT_RATIO,
       backgroundColor: '#fff',
       borderRadius: '12px',
       overflow: 'hidden' as const,
@@ -288,7 +289,7 @@ const Compose: React.FC = () => {
       left: 0,
       width: '100%',
       height: '100%',
-      objectFit: 'contain' as const,
+      objectFit: 'cover' as const,
       backgroundColor: '#000',
     },
     imagePlaceholder: {
@@ -398,14 +399,11 @@ const Compose: React.FC = () => {
 
         <div style={styles.imageGrid}>
           {allImages.map((imagePath, index) => {
-            const meta = imageMeta[index] ?? { src: '', aspectRatio: 3 / 4 };
+            const meta = imageMeta[index] ?? { src: '', aspectRatio: FINAL_ASPECT_RATIO };
             const preview = meta.src;
             const selectionOrder = selectedIndexes.indexOf(index);
             const isSelected = selectionOrder !== -1;
-            const ratio =
-              Number.isFinite(meta.aspectRatio) && meta.aspectRatio > 0
-                ? meta.aspectRatio
-                : 3 / 4;
+            const ratio = FINAL_ASPECT_RATIO;
             return (
               <div
               key={imagePath}

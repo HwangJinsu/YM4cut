@@ -268,6 +268,45 @@ ipcMain.handle('open-directory-dialog', async () => {
   return filePaths[0];
 });
 
+async function resolveTemplateImage(settings = {}) {
+  const resourceRoot = app.isPackaged ? process.resourcesPath : app.getAppPath();
+  const candidates = [
+    settings.templateImage,
+    path.join(resourceRoot, 'template-default.png'),
+    path.join(resourceRoot, 'assets', 'template-default.png'),
+    path.join(__dirname, 'assets', 'template-default.png'),
+    path.join(__dirname, '../src/assets/images/template-default.png'),
+    path.join(app.getAppPath(), 'template.png'),
+  ];
+
+  const tried = new Set();
+  for (const candidate of candidates) {
+    if (!candidate || tried.has(candidate)) {
+      continue;
+    }
+    tried.add(candidate);
+    let stats;
+    try {
+      stats = fs.statSync(candidate);
+    } catch {
+      continue;
+    }
+    if (!stats.isFile() || stats.size === 0) {
+      console.log('[compose-images] Skipping template candidate (missing or empty):', candidate);
+      continue;
+    }
+    try {
+      const buffer = await sharp(candidate).ensureAlpha().toBuffer();
+      console.log('[compose-images] Template resolved to:', candidate);
+      return { buffer, path: candidate };
+    } catch (error) {
+      console.warn('[compose-images] Failed to load template candidate:', candidate, error);
+    }
+  }
+
+  throw new Error('사용 가능한 템플릿 이미지를 찾을 수 없습니다. 설정에서 템플릿 파일을 확인해주세요.');
+}
+
 ipcMain.handle('compose-images', async (event, images) => {
   console.log('[compose-images] Received request.');
   try {
@@ -278,13 +317,7 @@ ipcMain.handle('compose-images', async (event, images) => {
       : {};
     console.log('[compose-images] Loaded settings:', settings);
 
-    let templatePath;
-    if (settings.templateImage && fs.existsSync(settings.templateImage)) {
-      templatePath = settings.templateImage;
-    } else {
-      templatePath = path.join(__dirname, '../src/assets/images/template-default.png');
-    }
-    console.log('[compose-images] Template path:', templatePath);
+    const { buffer: templateBuffer, path: templatePath } = await resolveTemplateImage(settings);
 
     const photoLayout = [
       { x: 30, y: 46, width: 533, height: 357 },
@@ -300,11 +333,50 @@ ipcMain.handle('compose-images', async (event, images) => {
       const brightness = settings.brightness ? parseFloat(settings.brightness) : 1.05;
       const contrast = settings.contrast ? parseFloat(settings.contrast) : 1;
       const saturation = settings.saturation ? parseFloat(settings.saturation) : 1.1;
+      const targetRatio = layout.width / layout.height;
 
       console.log(`[compose-images] Resizing image ${index}: ${image} with brightness: ${brightness}, contrast: ${contrast}, saturation: ${saturation}`);
-      const resizedImageBuffer = await sharp(image)
+      const metadata = await sharp(image, { failOnError: false }).metadata();
+
+      let cropRegion = null;
+      if (metadata.width && metadata.height) {
+        const sourceRatio = metadata.width / metadata.height;
+        if (Math.abs(sourceRatio - targetRatio) > 0.01) {
+          if (sourceRatio > targetRatio) {
+            const desiredWidth = Math.round(metadata.height * targetRatio);
+            const left = Math.max(0, Math.floor((metadata.width - desiredWidth) / 2));
+            cropRegion = {
+              left,
+              top: 0,
+              width: Math.min(desiredWidth, metadata.width - left),
+              height: metadata.height,
+            };
+          } else {
+            const desiredHeight = Math.round(metadata.width / targetRatio);
+            const top = Math.max(0, Math.floor((metadata.height - desiredHeight) / 2));
+            cropRegion = {
+              left: 0,
+              top,
+              width: metadata.width,
+              height: Math.min(desiredHeight, metadata.height - top),
+            };
+          }
+          console.log('[compose-images] Cropping before resize', { index, cropRegion, sourceRatio, targetRatio });
+        }
+      }
+
+      let pipeline = sharp(image, { failOnError: false });
+      if (cropRegion) {
+        pipeline = pipeline.extract(cropRegion);
+      }
+      const resizedImageBuffer = await pipeline
         .modulate({ brightness, contrast, saturation })
-        .resize(layout.width, layout.height)
+        .resize(layout.width, layout.height, {
+          fit: sharp.fit.cover,
+          position: sharp.strategy.attention,
+          withoutEnlargement: false,
+        })
+        .png()
         .toBuffer();
       
       return {
@@ -316,8 +388,9 @@ ipcMain.handle('compose-images', async (event, images) => {
     console.log('[compose-images] All images resized.');
 
     console.log('[compose-images] Creating single 1x3 composite in buffer.');
-    const singleCompositeBuffer = await sharp(templatePath)
+    const singleCompositeBuffer = await sharp(templateBuffer)
       .composite(compositeOperations)
+      .png()
       .toBuffer();
     
     const metadata = await sharp(singleCompositeBuffer).metadata();
