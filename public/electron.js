@@ -7,6 +7,7 @@ const sharp = require('sharp');
 const PRINT_DPI = 300;
 const PRINT_LONG_INCHES = 6;
 const PRINT_SHORT_INCHES = 4;
+const PRINT_SAFE_SCALE = 0.97;
 const MICRONS_PER_INCH = 25400;
 
 let PrinterModule;
@@ -59,22 +60,41 @@ async function prepareImageForPrint(imagePath) {
   const shouldRotate = width > height;
   const targetWidth = desiredShortPx;
   const targetHeight = desiredLongPx;
+  const safeWidth = Math.round(targetWidth * PRINT_SAFE_SCALE);
+  const safeHeight = Math.round(targetHeight * PRINT_SAFE_SCALE);
   console.log('[print-image] Preparing image for print', {
     sourceWidth: width,
     sourceHeight: height,
     targetWidth,
     targetHeight,
+    safeWidth,
+    safeHeight,
     rotate: shouldRotate ? 90 : 0,
   });
 
-  const imageBuffer = await sharp(imagePath)
+  const processedImage = await sharp(imagePath, { failOnError: false })
     .rotate(shouldRotate ? 90 : 0, { background: { r: 255, g: 255, b: 255, alpha: 1 } })
     .resize({
-      width: targetWidth,
-      height: targetHeight,
+      width: safeWidth,
+      height: safeHeight,
       fit: sharp.fit.contain,
       background: { r: 255, g: 255, b: 255, alpha: 1 },
     })
+    .png()
+    .toBuffer();
+
+  const offsetLeft = Math.max(0, Math.round((targetWidth - safeWidth) / 2));
+  const offsetTop = Math.max(0, Math.round((targetHeight - safeHeight) / 2));
+
+  const imageBuffer = await sharp({
+    create: {
+      width: targetWidth,
+      height: targetHeight,
+      channels: 4,
+      background: { r: 255, g: 255, b: 255, alpha: 1 },
+    },
+  })
+    .composite([{ input: processedImage, top: offsetTop, left: offsetLeft }])
     .png()
     .toBuffer();
 
@@ -520,7 +540,7 @@ ipcMain.handle('print-image', async (event, { imagePath, printerName }) => {
                 img {
                   max-width: 100%;
                   max-height: 100%;
-                  object-fit: cover;
+                  object-fit: contain;
                   transform: ${scale};
                   transform-origin: center;
                 }
