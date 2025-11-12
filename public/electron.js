@@ -502,7 +502,7 @@ ipcMain.handle('print-image', async (event, { imagePath, printerName }) => {
         };
 
         const orientationStyle = `@page { size: ${PRINT_SHORT_INCHES}in ${PRINT_LONG_INCHES}in; margin: 0; }`;
-        const scale = 'scale(1.05)';
+        const scale = 'none';
         const html = `
           <html>
             <head>
