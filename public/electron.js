@@ -7,7 +7,13 @@ const sharp = require('sharp');
 const PRINT_DPI = 300;
 const PRINT_LONG_INCHES = 6;
 const PRINT_SHORT_INCHES = 4;
-const PRINT_SAFE_SCALE = 0.97;
+const MM_PER_INCH = 25.4;
+const PRINT_MARGIN_MM = {
+  top: 2,
+  right: 4,
+  bottom: 12,
+  left: 2,
+};
 const MICRONS_PER_INCH = 25400;
 
 let PrinterModule;
@@ -51,6 +57,10 @@ function createWindow() {
   }
 }
 
+function mmToPx(mm) {
+  return Math.max(0, Math.round((mm / MM_PER_INCH) * PRINT_DPI));
+}
+
 async function prepareImageForPrint(imagePath) {
   const desiredLongPx = PRINT_LONG_INCHES * PRINT_DPI;
   const desiredShortPx = PRINT_SHORT_INCHES * PRINT_DPI;
@@ -60,13 +70,24 @@ async function prepareImageForPrint(imagePath) {
   const shouldRotate = width > height;
   const targetWidth = desiredShortPx;
   const targetHeight = desiredLongPx;
-  const safeWidth = Math.round(targetWidth * PRINT_SAFE_SCALE);
-  const safeHeight = Math.round(targetHeight * PRINT_SAFE_SCALE);
+
+  const marginPx = {
+    top: mmToPx(PRINT_MARGIN_MM.top),
+    right: mmToPx(PRINT_MARGIN_MM.right),
+    bottom: mmToPx(PRINT_MARGIN_MM.bottom),
+    left: mmToPx(PRINT_MARGIN_MM.left),
+  };
+
+  const safeWidth = Math.max(1, targetWidth - (marginPx.left + marginPx.right));
+  const safeHeight = Math.max(1, targetHeight - (marginPx.top + marginPx.bottom));
   console.log('[print-image] Preparing image for print', {
     sourceWidth: width,
     sourceHeight: height,
     targetWidth,
     targetHeight,
+    safeWidth,
+    safeHeight,
+    marginsPx: marginPx,
     safeWidth,
     safeHeight,
     rotate: shouldRotate ? 90 : 0,
@@ -83,8 +104,8 @@ async function prepareImageForPrint(imagePath) {
     .png()
     .toBuffer();
 
-  const offsetLeft = Math.max(0, Math.round((targetWidth - safeWidth) / 2));
-  const offsetTop = Math.max(0, Math.round((targetHeight - safeHeight) / 2));
+  const offsetLeft = marginPx.left;
+  const offsetTop = marginPx.top;
 
   const imageBuffer = await sharp({
     create: {
