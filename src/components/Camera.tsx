@@ -180,11 +180,29 @@ const Camera: React.FC = () => {
     if (videoRef.current && canvasRef.current) {
       const video = videoRef.current;
       const canvas = canvasRef.current;
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
+      const targetRatio = 533 / 340;
+      const videoWidth = video.videoWidth;
+      const videoHeight = video.videoHeight;
+      const videoRatio = videoWidth / videoHeight;
+
+      let sx = 0;
+      let sy = 0;
+      let sw = videoWidth;
+      let sh = videoHeight;
+
+      if (videoRatio > targetRatio) {
+        sw = Math.round(videoHeight * targetRatio);
+        sx = Math.max(0, Math.round((videoWidth - sw) / 2));
+      } else if (videoRatio < targetRatio) {
+        sh = Math.round(videoWidth / targetRatio);
+        sy = Math.max(0, Math.round((videoHeight - sh) / 2));
+      }
+
+      canvas.width = sw;
+      canvas.height = sh;
       const context = canvas.getContext('2d');
       if (context) {
-        context.drawImage(video, 0, 0, canvas.width, canvas.height);
+        context.drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
         const dataUrl = canvas.toDataURL('image/png');
         const imagePath = await window.electron.saveImage(dataUrl);
         setCapturedImages(prev => [...prev, imagePath]);

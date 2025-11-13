@@ -90,16 +90,20 @@ async function prepareImageForPrint(imagePath) {
     left: mmToPx(PRINT_BLEED_MM.left),
   };
 
-  const innerWidth = Math.max(1, targetWidth - (marginPx.left + marginPx.right));
-  const innerHeight = Math.max(1, targetHeight - (marginPx.top + marginPx.bottom));
+  const printableWidth = Math.max(1, targetWidth - (marginPx.left + marginPx.right));
+  const printableHeight = Math.max(1, targetHeight - (marginPx.top + marginPx.bottom));
+  const baseWidth = Math.max(1, printableWidth - (bleedPx.left + bleedPx.right));
+  const baseHeight = Math.max(1, printableHeight - (bleedPx.top + bleedPx.bottom));
   console.log('[print-image] Preparing image for print', {
     sourceWidth: width,
     sourceHeight: height,
     rotate: shouldRotate ? 90 : 0,
     targetWidth,
     targetHeight,
-    innerWidth,
-    innerHeight,
+    printableWidth,
+    printableHeight,
+    baseWidth,
+    baseHeight,
     marginsPx: marginPx,
     bleedPx,
   });
@@ -107,9 +111,9 @@ async function prepareImageForPrint(imagePath) {
   const resizedBuffer = await sharp(imagePath, { failOnError: false })
     .rotate(shouldRotate ? 90 : 0, { background: { r: 255, g: 255, b: 255, alpha: 1 } })
     .resize({
-      width: innerWidth,
-      height: innerHeight,
-      fit: sharp.fit.inside,
+      width: baseWidth,
+      height: baseHeight,
+      fit: sharp.fit.cover,
       background: { r: 255, g: 255, b: 255, alpha: 1 },
       withoutEnlargement: false,
     })
@@ -130,8 +134,12 @@ async function prepareImageForPrint(imagePath) {
     .png()
     .toBuffer();
 
-  const offsetLeft = marginPx.left - bleedPx.left;
-  const offsetTop = marginPx.top - bleedPx.top;
+  const extendedMeta = await sharp(extendedBuffer).metadata();
+  const leftoverWidth = Math.max(0, printableWidth - (extendedMeta.width || 0));
+  const leftoverHeight = Math.max(0, printableHeight - (extendedMeta.height || 0));
+
+  const offsetLeft = marginPx.left + Math.floor(leftoverWidth / 2);
+  const offsetTop = marginPx.top + Math.floor(leftoverHeight / 2);
 
   const imageBuffer = await sharp({
     create: {
