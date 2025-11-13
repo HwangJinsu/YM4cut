@@ -9,10 +9,16 @@ const PRINT_LONG_INCHES = 6;
 const PRINT_SHORT_INCHES = 4;
 const MM_PER_INCH = 25.4;
 const PRINT_MARGIN_MM = {
-  top: 2,
-  right: 6,
-  bottom: 12,
+  top: 0,
+  right: 0,
+  bottom: 0,
   left: 0,
+};
+const PRINT_BLEED_MM = {
+  top: 2,
+  right: 2.5,
+  bottom: 3,
+  left: 2.5,
 };
 const MICRONS_PER_INCH = 25400;
 
@@ -77,35 +83,55 @@ async function prepareImageForPrint(imagePath) {
     bottom: mmToPx(PRINT_MARGIN_MM.bottom),
     left: mmToPx(PRINT_MARGIN_MM.left),
   };
+  const bleedPx = {
+    top: mmToPx(PRINT_BLEED_MM.top),
+    right: mmToPx(PRINT_BLEED_MM.right),
+    bottom: mmToPx(PRINT_BLEED_MM.bottom),
+    left: mmToPx(PRINT_BLEED_MM.left),
+  };
 
-  const safeWidth = Math.max(1, targetWidth - (marginPx.left + marginPx.right));
-  const safeHeight = Math.max(1, targetHeight - (marginPx.top + marginPx.bottom));
+  const innerWidth = Math.max(1, targetWidth - (marginPx.left + marginPx.right));
+  const innerHeight = Math.max(1, targetHeight - (marginPx.top + marginPx.bottom));
   console.log('[print-image] Preparing image for print', {
     sourceWidth: width,
     sourceHeight: height,
+    rotate: shouldRotate ? 90 : 0,
     targetWidth,
     targetHeight,
-    safeWidth,
-    safeHeight,
+    innerWidth,
+    innerHeight,
     marginsPx: marginPx,
-    safeWidth,
-    safeHeight,
-    rotate: shouldRotate ? 90 : 0,
+    bleedPx,
   });
 
-  const processedImage = await sharp(imagePath, { failOnError: false })
+  const resizedBuffer = await sharp(imagePath, { failOnError: false })
     .rotate(shouldRotate ? 90 : 0, { background: { r: 255, g: 255, b: 255, alpha: 1 } })
     .resize({
-      width: safeWidth,
-      height: safeHeight,
-      fit: sharp.fit.contain,
+      width: innerWidth,
+      height: innerHeight,
+      fit: sharp.fit.inside,
       background: { r: 255, g: 255, b: 255, alpha: 1 },
+      withoutEnlargement: false,
     })
     .png()
     .toBuffer();
 
-  const offsetLeft = marginPx.left;
-  const offsetTop = marginPx.top;
+  const resizedMeta = await sharp(resizedBuffer).metadata();
+  console.log('[print-image] Resized dimensions', resizedMeta);
+
+  const extendedBuffer = await sharp(resizedBuffer)
+    .extend({
+      top: bleedPx.top,
+      bottom: bleedPx.bottom,
+      left: bleedPx.left,
+      right: bleedPx.right,
+      extendWith: 'copy',
+    })
+    .png()
+    .toBuffer();
+
+  const offsetLeft = marginPx.left - bleedPx.left;
+  const offsetTop = marginPx.top - bleedPx.top;
 
   const imageBuffer = await sharp({
     create: {
@@ -115,7 +141,7 @@ async function prepareImageForPrint(imagePath) {
       background: { r: 255, g: 255, b: 255, alpha: 1 },
     },
   })
-    .composite([{ input: processedImage, top: offsetTop, left: offsetLeft }])
+    .composite([{ input: extendedBuffer, top: offsetTop, left: offsetLeft }])
     .png()
     .toBuffer();
 

@@ -16,7 +16,17 @@ const DEFAULT_ZOOM = 1.3;
 const ZOOM_MIN = 0.8;
 const ZOOM_MAX = 2;
 const ZOOM_STEP = 0.1;
-const FINAL_ASPECT_RATIO = 533 / 357;
+const DEFAULT_ASPECT_RATIO = 533 / 340;
+const PREVIEW_RATIOS = [
+  533 / 335,
+  533 / 340,
+  533 / 340,
+  533 / 340,
+  533 / 340,
+  533 / 340,
+  533 / 340,
+  533 / 340,
+];
 
 const Compose: React.FC = () => {
   const location = useLocation();
@@ -40,7 +50,7 @@ const Compose: React.FC = () => {
 
   const [selectedIndexes, setSelectedIndexes] = useState<number[]>(initialSelection);
   const [imageMeta, setImageMeta] = useState<ImageMeta[]>(() =>
-    allImages.map(() => ({ src: '', aspectRatio: FINAL_ASPECT_RATIO }))
+    allImages.map((_, index) => ({ src: '', aspectRatio: PREVIEW_RATIOS[index] ?? DEFAULT_ASPECT_RATIO }))
   );
   const [composing, setComposing] = useState<boolean>(initialSelection.length === MAX_SELECTION);
   const [finalImage, setFinalImage] = useState<string | null>(null);
@@ -52,28 +62,29 @@ const Compose: React.FC = () => {
     let isActive = true;
     const loadPreviews = async () => {
       const previews = await Promise.all(
-        allImages.map(async imagePath => {
+        allImages.map(async (imagePath, index) => {
+          const fallbackRatio = PREVIEW_RATIOS[index] ?? DEFAULT_ASPECT_RATIO;
           try {
             const dataUrl = await window.electron.getImageAsBase64(imagePath);
             if (!dataUrl) {
-              return { src: '', aspectRatio: FINAL_ASPECT_RATIO };
+              return { src: '', aspectRatio: fallbackRatio };
             }
             const ratio = await new Promise<number>(resolve => {
               const img = new Image();
               img.onload = () => {
                 if (img.height === 0) {
-                  resolve(FINAL_ASPECT_RATIO);
+                  resolve(fallbackRatio);
                 } else {
                   resolve(img.width / img.height);
                 }
               };
-              img.onerror = () => resolve(FINAL_ASPECT_RATIO);
+              img.onerror = () => resolve(fallbackRatio);
               img.src = dataUrl;
             });
             return { src: dataUrl, aspectRatio: ratio };
           } catch (error) {
             console.error('Failed to load preview:', error);
-            return { src: '', aspectRatio: FINAL_ASPECT_RATIO };
+            return { src: '', aspectRatio: fallbackRatio };
           }
         })
       );
@@ -261,7 +272,7 @@ const Compose: React.FC = () => {
       position: 'relative' as const,
       width: `${scaledWidth}px`,
       maxWidth: '100%',
-      aspectRatio: ratio || FINAL_ASPECT_RATIO,
+      aspectRatio: ratio || DEFAULT_ASPECT_RATIO,
       backgroundColor: '#fff',
       borderRadius: '12px',
       overflow: 'hidden' as const,
@@ -399,11 +410,12 @@ const Compose: React.FC = () => {
 
         <div style={styles.imageGrid}>
           {allImages.map((imagePath, index) => {
-            const meta = imageMeta[index] ?? { src: '', aspectRatio: FINAL_ASPECT_RATIO };
+            const fallbackRatio = PREVIEW_RATIOS[index] ?? DEFAULT_ASPECT_RATIO;
+            const meta = imageMeta[index] ?? { src: '', aspectRatio: fallbackRatio };
             const preview = meta.src;
             const selectionOrder = selectedIndexes.indexOf(index);
             const isSelected = selectionOrder !== -1;
-            const ratio = FINAL_ASPECT_RATIO;
+            const ratio = fallbackRatio;
             return (
               <div
               key={imagePath}

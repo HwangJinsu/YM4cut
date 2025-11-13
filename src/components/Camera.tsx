@@ -130,7 +130,12 @@ const Camera: React.FC = () => {
         if (settings.shutterTimer) {
           setShutterInterval(Math.min(10, Math.max(5, parseInt(settings.shutterTimer, 10))));
         }
-        const videoConstraints: MediaStreamConstraints['video'] = {};
+        const desiredAspectRatio = 533 / 340;
+        const videoConstraints: MediaStreamConstraints['video'] = {
+          aspectRatio: desiredAspectRatio,
+          width: { ideal: 1920 },
+          height: { ideal: Math.round(1920 / desiredAspectRatio) },
+        };
         if (settings.selectedCamera) {
           videoConstraints.deviceId = { exact: settings.selectedCamera };
         }
