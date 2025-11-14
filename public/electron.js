@@ -113,7 +113,7 @@ async function prepareImageForPrint(imagePath) {
     .resize({
       width: baseWidth,
       height: baseHeight,
-      fit: sharp.fit.cover,
+      fit: sharp.fit.contain,
       background: { r: 255, g: 255, b: 255, alpha: 1 },
       withoutEnlargement: false,
     })
@@ -411,39 +411,16 @@ ipcMain.handle('compose-images', async (event, images) => {
       const targetRatio = layout.width / layout.height;
 
       console.log(`[compose-images] Resizing image ${index}: ${image} with brightness: ${brightness}, contrast: ${contrast}, saturation: ${saturation}`);
-      const metadata = await sharp(image, { failOnError: false }).metadata();
-
-      let cropRegion = null;
-      if (metadata.width && metadata.height) {
-        const sourceRatio = metadata.width / metadata.height;
-        if (Math.abs(sourceRatio - targetRatio) > 0.01) {
-          if (sourceRatio > targetRatio) {
-            const desiredWidth = Math.round(metadata.height * targetRatio);
-            const left = Math.max(0, Math.floor((metadata.width - desiredWidth) / 2));
-            cropRegion = {
-              left,
-              top: 0,
-              width: Math.min(desiredWidth, metadata.width - left),
-              height: metadata.height,
-            };
-          } else {
-            const desiredHeight = Math.round(metadata.width / targetRatio);
-            const top = Math.max(0, Math.floor((metadata.height - desiredHeight) / 2));
-            cropRegion = {
-              left: 0,
-              top,
-              width: metadata.width,
-              height: Math.min(desiredHeight, metadata.height - top),
-            };
-          }
-          console.log('[compose-images] Cropping before resize', { index, cropRegion, sourceRatio, targetRatio });
-        }
-      }
-
       let pipeline = sharp(image, { failOnError: false });
-      if (cropRegion) {
-        pipeline = pipeline.extract(cropRegion);
+      try {
+        pipeline = pipeline.trim();
+      } catch (trimError) {
+        console.warn('[compose-images] Trim failed, proceeding without border removal', trimError);
+        pipeline = sharp(image, { failOnError: false });
       }
+      const metadata = await pipeline.metadata();
+      console.log('[compose-images] Source metadata', { index, width: metadata.width, height: metadata.height });
+
       const resizedImageBuffer = await pipeline
         .modulate({ brightness, contrast, saturation })
         .resize(layout.width, layout.height, {
