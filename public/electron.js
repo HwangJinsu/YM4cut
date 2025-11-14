@@ -411,17 +411,34 @@ ipcMain.handle('compose-images', async (event, images) => {
       const targetRatio = layout.width / layout.height;
 
       console.log(`[compose-images] Resizing image ${index}: ${image} with brightness: ${brightness}, contrast: ${contrast}, saturation: ${saturation}`);
-      let workingBuffer;
-      try {
-        workingBuffer = await sharp(image, { failOnError: false }).trim().toBuffer();
-      } catch (trimError) {
-        console.warn('[compose-images] Trim failed, proceeding without border removal', trimError);
-        workingBuffer = fs.readFileSync(image);
+      let workingBuffer = await sharp(image, { failOnError: false }).ensureAlpha().toBuffer();
+      let workingMeta = await sharp(workingBuffer).metadata();
+      const trimThresholds = [64, 48, 32, 24, 16, 8];
+      for (const threshold of trimThresholds) {
+        try {
+          const trimmed = await sharp(workingBuffer, { failOnError: false })
+            .trim({ threshold })
+            .toBuffer();
+          const trimmedMeta = await sharp(trimmed).metadata();
+          if (
+            trimmedMeta.width &&
+            trimmedMeta.height &&
+            workingMeta.width &&
+            workingMeta.height &&
+            (trimmedMeta.width < workingMeta.width || trimmedMeta.height < workingMeta.height)
+          ) {
+            console.log('[compose-images] Trim applied', { index, threshold, width: trimmedMeta.width, height: trimmedMeta.height });
+            workingBuffer = trimmed;
+            workingMeta = trimmedMeta;
+            break;
+          }
+        } catch (trimError) {
+          console.warn('[compose-images] Trim attempt failed', { index, threshold, error: trimError.message });
+        }
       }
 
-      const metadata = await sharp(workingBuffer).metadata();
-      const sourceWidth = metadata.width ?? layout.width;
-      const sourceHeight = metadata.height ?? layout.height;
+      const sourceWidth = workingMeta.width ?? layout.width;
+      const sourceHeight = workingMeta.height ?? layout.height;
       const sourceRatio = sourceWidth / sourceHeight;
       let cropRegion = null;
 
