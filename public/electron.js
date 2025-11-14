@@ -411,15 +411,47 @@ ipcMain.handle('compose-images', async (event, images) => {
       const targetRatio = layout.width / layout.height;
 
       console.log(`[compose-images] Resizing image ${index}: ${image} with brightness: ${brightness}, contrast: ${contrast}, saturation: ${saturation}`);
-      let pipeline = sharp(image, { failOnError: false });
+      let workingBuffer;
       try {
-        pipeline = pipeline.trim();
+        workingBuffer = await sharp(image, { failOnError: false }).trim().toBuffer();
       } catch (trimError) {
         console.warn('[compose-images] Trim failed, proceeding without border removal', trimError);
-        pipeline = sharp(image, { failOnError: false });
+        workingBuffer = fs.readFileSync(image);
       }
-      const metadata = await pipeline.metadata();
-      console.log('[compose-images] Source metadata', { index, width: metadata.width, height: metadata.height });
+
+      const metadata = await sharp(workingBuffer).metadata();
+      const sourceWidth = metadata.width ?? layout.width;
+      const sourceHeight = metadata.height ?? layout.height;
+      const sourceRatio = sourceWidth / sourceHeight;
+      let cropRegion = null;
+
+      if (Math.abs(sourceRatio - targetRatio) > 0.005) {
+        if (sourceRatio > targetRatio) {
+          const desiredWidth = Math.round(sourceHeight * targetRatio);
+          const left = Math.max(0, Math.floor((sourceWidth - desiredWidth) / 2));
+          cropRegion = {
+            left,
+            top: 0,
+            width: Math.min(desiredWidth, sourceWidth - left),
+            height: sourceHeight,
+          };
+        } else {
+          const desiredHeight = Math.round(sourceWidth / targetRatio);
+          const top = Math.max(0, Math.floor((sourceHeight - desiredHeight) / 2));
+          cropRegion = {
+            left: 0,
+            top,
+            width: sourceWidth,
+            height: Math.min(desiredHeight, sourceHeight - top),
+          };
+        }
+        console.log('[compose-images] Cropping to match layout', { index, cropRegion, sourceRatio, targetRatio });
+      }
+
+      let pipeline = sharp(workingBuffer, { failOnError: false });
+      if (cropRegion) {
+        pipeline = pipeline.extract(cropRegion);
+      }
 
       const resizedImageBuffer = await pipeline
         .modulate({ brightness, contrast, saturation })
