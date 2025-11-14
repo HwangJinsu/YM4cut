@@ -64,8 +64,28 @@ const Settings: React.FC = () => {
       }
 
       // Fetch cameras
-      const devices = await navigator.mediaDevices.enumerateDevices();
-      const videoDevices = devices.filter(device => device.kind === 'videoinput');
+      let videoDevices: MediaDeviceInfo[] = [];
+      if (navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {
+        try {
+          const devices = await navigator.mediaDevices.enumerateDevices();
+          videoDevices = devices.filter(device => device.kind === 'videoinput');
+          if (videoDevices.length === 0 && navigator.mediaDevices.getUserMedia) {
+            try {
+              const tempStream = await navigator.mediaDevices.getUserMedia({
+                video: true,
+                audio: false,
+              });
+              const refreshed = await navigator.mediaDevices.enumerateDevices();
+              videoDevices = refreshed.filter(device => device.kind === 'videoinput');
+              tempStream.getTracks().forEach(track => track.stop());
+            } catch (permissionError) {
+              console.warn('[Settings] getUserMedia fallback failed', permissionError);
+            }
+          }
+        } catch (deviceError) {
+          console.warn('[Settings] Failed to enumerate camera devices', deviceError);
+        }
+      }
       setCameras(videoDevices);
 
       // Fetch printers
