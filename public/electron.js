@@ -289,12 +289,15 @@ async function prepareImageForPrint(imagePath) {
   const leftoverHeight = Math.max(0, printableHeight - (extendedMeta.height || 0));
 
   const offsetLeft = marginPx.left;
-  const offsetTop = Math.max(0, marginPx.top + mmToPx(PRINT_TOP_FUDGE_MM));
+  const offsetTop = marginPx.top;
+  const topShiftPx =
+    PRINT_TOP_FUDGE_MM < 0 ? Math.round((Math.abs(PRINT_TOP_FUDGE_MM) / MM_PER_INCH) * PRINT_DPI) : 0;
+  const stageHeight = topShiftPx > 0 ? targetHeight + topShiftPx : targetHeight;
 
-  const imageBuffer = await sharp({
+  let stagedBuffer = await sharp({
     create: {
       width: targetWidth,
-      height: targetHeight,
+      height: stageHeight,
       channels: 4,
       background: { r: 255, g: 255, b: 255, alpha: 1 },
     },
@@ -303,12 +306,24 @@ async function prepareImageForPrint(imagePath) {
     .png()
     .toBuffer();
 
+  if (topShiftPx > 0) {
+    stagedBuffer = await sharp(stagedBuffer)
+      .extract({
+        left: 0,
+        top: Math.min(topShiftPx, stageHeight - targetHeight),
+        width: targetWidth,
+        height: targetHeight,
+      })
+      .png()
+      .toBuffer();
+  }
+
   const pageWidthMicrons = Math.round(PRINT_SHORT_INCHES * MICRONS_PER_INCH);
   const pageHeightMicrons = Math.round(PRINT_LONG_INCHES * MICRONS_PER_INCH);
 
   const imageTempPath = path.join(app.getPath('temp'), `ym4cut_image_${Date.now()}.png`);
-  fs.writeFileSync(imageTempPath, imageBuffer);
-  console.log('[print-image] Temp image written', imageTempPath, 'bytes', imageBuffer.length);
+  fs.writeFileSync(imageTempPath, stagedBuffer);
+  console.log('[print-image] Temp image written', imageTempPath, 'bytes', stagedBuffer.length);
 
   return {
     imagePath: imageTempPath,
