@@ -67,6 +67,61 @@ function mmToPx(mm) {
   return Math.max(0, Math.round((mm / MM_PER_INCH) * PRINT_DPI));
 }
 
+async function cropBufferToRatio(buffer, targetRatio, options = {}) {
+  const { tolerance = 0.003, label = 'crop' } = options;
+  const metadata = await sharp(buffer).metadata();
+  const width = metadata.width ?? 0;
+  const height = metadata.height ?? 0;
+
+  if (width <= 1 || height <= 1) {
+    return { buffer, metadata };
+  }
+
+  const ratio = width / height;
+  if (Math.abs(ratio - targetRatio) <= tolerance) {
+    return { buffer, metadata };
+  }
+
+  let extractRegion;
+  if (ratio > targetRatio) {
+    const desiredWidth = Math.max(1, Math.round(height * targetRatio));
+    const left = Math.max(0, Math.floor((width - desiredWidth) / 2));
+    extractRegion = {
+      left,
+      top: 0,
+      width: Math.min(desiredWidth, width - left),
+      height,
+    };
+  } else {
+    const desiredHeight = Math.max(1, Math.round(width / targetRatio));
+    const top = Math.max(0, Math.floor((height - desiredHeight) / 2));
+    extractRegion = {
+      left: 0,
+      top,
+      width,
+      height: Math.min(desiredHeight, height - top),
+    };
+  }
+
+  const croppedBuffer = await sharp(buffer)
+    .extract(extractRegion)
+    .toBuffer();
+
+  const croppedMeta = await sharp(croppedBuffer).metadata();
+  console.log('[compose-images] Crop applied', {
+    label,
+    targetRatio,
+    before: { width, height, ratio },
+    after: {
+      width: croppedMeta.width,
+      height: croppedMeta.height,
+      ratio: croppedMeta.width && croppedMeta.height ? croppedMeta.width / croppedMeta.height : null,
+    },
+  });
+
+  return { buffer: croppedBuffer, metadata: croppedMeta };
+}
+
 async function prepareImageForPrint(imagePath) {
   const desiredLongPx = PRINT_LONG_INCHES * PRINT_DPI;
   const desiredShortPx = PRINT_SHORT_INCHES * PRINT_DPI;
@@ -437,9 +492,6 @@ ipcMain.handle('compose-images', async (event, images) => {
         }
       }
 
-      let sourceWidth = workingMeta.width ?? layout.width;
-      let sourceHeight = workingMeta.height ?? layout.height;
-      let sourceRatio = sourceWidth / sourceHeight;
       try {
         const { data, info } = await sharp(workingBuffer)
           .removeAlpha()
@@ -499,45 +551,27 @@ ipcMain.handle('compose-images', async (event, images) => {
               })
               .toBuffer();
             workingMeta = await sharp(workingBuffer).metadata();
-            sourceWidth = workingMeta.width ?? layout.width;
-            sourceHeight = workingMeta.height ?? layout.height;
-            sourceRatio = sourceWidth / sourceHeight;
           }
         }
       } catch (columnTrimError) {
         console.warn('[compose-images] Column trim analysis failed', { index, error: columnTrimError.message });
       }
-      let cropRegion = null;
+      const nativeCrop = await cropBufferToRatio(workingBuffer, CAMERA_NATIVE_RATIO, {
+        tolerance: 0.002,
+        label: `native-ratio-${index}`,
+      });
+      workingBuffer = nativeCrop.buffer;
+      workingMeta = nativeCrop.metadata;
 
-      if (Math.abs(sourceRatio - targetRatio) > 0.005) {
-        if (sourceRatio > targetRatio) {
-          const desiredWidth = Math.round(sourceHeight * targetRatio);
-          const left = Math.max(0, Math.floor((sourceWidth - desiredWidth) / 2));
-          cropRegion = {
-            left,
-            top: 0,
-            width: Math.min(desiredWidth, sourceWidth - left),
-            height: sourceHeight,
-          };
-        } else {
-          const desiredHeight = Math.round(sourceWidth / targetRatio);
-          const top = Math.max(0, Math.floor((sourceHeight - desiredHeight) / 2));
-          cropRegion = {
-            left: 0,
-            top,
-            width: sourceWidth,
-            height: Math.min(desiredHeight, sourceHeight - top),
-          };
-        }
-        console.log('[compose-images] Cropping to match layout', { index, cropRegion, sourceRatio, targetRatio });
-      }
+      const slotRatio = layout.width / layout.height;
+      const slotCrop = await cropBufferToRatio(workingBuffer, slotRatio, {
+        tolerance: 0.001,
+        label: `slot-ratio-${index}`,
+      });
+      workingBuffer = slotCrop.buffer;
+      workingMeta = slotCrop.metadata;
 
-      let pipeline = sharp(workingBuffer, { failOnError: false });
-      if (cropRegion) {
-        pipeline = pipeline.extract(cropRegion);
-      }
-
-      const resizedImageBuffer = await pipeline
+      const resizedImageBuffer = await sharp(workingBuffer, { failOnError: false })
         .modulate({ brightness, contrast, saturation })
         .resize(layout.width, layout.height, {
           fit: sharp.fit.cover,
