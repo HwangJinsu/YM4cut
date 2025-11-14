@@ -288,7 +288,7 @@ async function prepareImageForPrint(imagePath) {
   const leftoverHeight = Math.max(0, printableHeight - (extendedMeta.height || 0));
 
   const offsetLeft = marginPx.left;
-  const offsetTop = marginPx.top + Math.floor(leftoverHeight / 2);
+  const offsetTop = marginPx.top;
 
   const imageBuffer = await sharp({
     create: {
