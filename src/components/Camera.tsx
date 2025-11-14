@@ -202,7 +202,7 @@ const Camera: React.FC = () => {
     if (videoRef.current && canvasRef.current) {
       const video = videoRef.current;
       const canvas = canvasRef.current;
-      const targetRatio = 533 / 340;
+      const targetRatio = 3 / 2;
       const videoWidth = video.videoWidth;
       const videoHeight = video.videoHeight;
       const videoRatio = videoWidth / videoHeight;
@@ -223,12 +223,110 @@ const Camera: React.FC = () => {
       canvas.width = sw;
       canvas.height = sh;
       const context = canvas.getContext('2d');
-      if (context) {
-        context.drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
-        const dataUrl = canvas.toDataURL('image/png');
-        const imagePath = await window.electron.saveImage(dataUrl);
-        setCapturedImages(prev => [...prev, imagePath]);
+      if (!context) {
+        return;
       }
+
+      context.drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+
+      const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+      const { width, height, data } = imageData;
+
+      const maxTrimColumns = Math.floor(width * 0.25);
+      const meanThreshold = 24;
+      const stdThreshold = 7;
+
+      const columnSums = new Array(width).fill(0);
+      const columnSquares = new Array(width).fill(0);
+      for (let y = 0; y < height; y += 1) {
+        const rowOffset = y * width * 4;
+        for (let x = 0; x < width; x += 1) {
+          const offset = rowOffset + x * 4;
+          const r = data[offset];
+          const g = data[offset + 1];
+          const b = data[offset + 2];
+          const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+          columnSums[x] += luminance;
+          columnSquares[x] += luminance * luminance;
+        }
+      }
+
+      const columnMeans = columnSums.map(sum => sum / height);
+      const columnStd = columnSquares.map((sumSq, index) => {
+        const mean = columnMeans[index];
+        const variance = Math.max(0, sumSq / height - mean * mean);
+        return Math.sqrt(variance);
+      });
+
+      let leftTrim = 0;
+      while (
+        leftTrim < width - 1 &&
+        leftTrim < maxTrimColumns &&
+        columnMeans[leftTrim] <= meanThreshold &&
+        columnStd[leftTrim] <= stdThreshold
+      ) {
+        leftTrim += 1;
+      }
+
+      let rightTrim = 0;
+      while (
+        rightTrim < width - 1 - leftTrim &&
+        rightTrim < maxTrimColumns &&
+        columnMeans[width - 1 - rightTrim] <= meanThreshold &&
+        columnStd[width - 1 - rightTrim] <= stdThreshold
+      ) {
+        rightTrim += 1;
+      }
+
+      let cropX = leftTrim;
+      let cropWidth = width - leftTrim - rightTrim;
+      let cropY = 0;
+      let cropHeight = height;
+
+      if (cropWidth < 10) {
+        cropX = 0;
+        cropWidth = width;
+      }
+
+      const cropRatio = cropWidth / cropHeight;
+      if (cropRatio > targetRatio) {
+        const desiredWidth = Math.max(1, Math.round(cropHeight * targetRatio));
+        const excess = cropWidth - desiredWidth;
+        cropX += Math.floor(excess / 2);
+        cropWidth = desiredWidth;
+      } else if (cropRatio < targetRatio) {
+        const desiredHeight = Math.max(1, Math.round(cropWidth / targetRatio));
+        const excess = cropHeight - desiredHeight;
+        cropY += Math.floor(excess / 2);
+        cropHeight = desiredHeight;
+      }
+
+      cropX = Math.max(0, Math.min(cropX, width - cropWidth));
+      cropY = Math.max(0, Math.min(cropY, height - cropHeight));
+
+      const processedCanvas = document.createElement('canvas');
+      processedCanvas.width = cropWidth;
+      processedCanvas.height = cropHeight;
+      const processedContext = processedCanvas.getContext('2d');
+      if (!processedContext) {
+        return;
+      }
+
+      processedContext.drawImage(
+        canvas,
+        cropX,
+        cropY,
+        cropWidth,
+        cropHeight,
+        0,
+        0,
+        cropWidth,
+        cropHeight
+      );
+
+      const dataUrl = processedCanvas.toDataURL('image/png');
+      const imagePath = await window.electron.saveImage(dataUrl);
+      setCapturedImages(prev => [...prev, imagePath]);
     }
   };
 
