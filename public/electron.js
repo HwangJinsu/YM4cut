@@ -21,6 +21,7 @@ const PRINT_BLEED_MM = {
   left: 2.5,
 };
 const PRINT_RIGHT_FUDGE_MM = 2.2;
+const PRINT_TOP_FUDGE_MM = -2;
 const MICRONS_PER_INCH = 25400;
 const CAMERA_NATIVE_RATIO = 3 / 2;
 
@@ -288,7 +289,7 @@ async function prepareImageForPrint(imagePath) {
   const leftoverHeight = Math.max(0, printableHeight - (extendedMeta.height || 0));
 
   const offsetLeft = marginPx.left;
-  const offsetTop = marginPx.top;
+  const offsetTop = Math.max(0, marginPx.top + mmToPx(PRINT_TOP_FUDGE_MM));
 
   const imageBuffer = await sharp({
     create: {
