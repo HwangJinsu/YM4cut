@@ -21,6 +21,7 @@ const PRINT_BLEED_MM = {
   left: 2.5,
 };
 const MICRONS_PER_INCH = 25400;
+const CAMERA_NATIVE_RATIO = 3 / 2;
 
 let PrinterModule;
 try {
