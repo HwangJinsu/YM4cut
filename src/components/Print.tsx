@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
 const Print: React.FC = () => {
@@ -11,6 +11,8 @@ const Print: React.FC = () => {
   const [printing, setPrinting] = useState(true);
   const [printError, setPrintError] = useState<string | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const hasAutoPrintedRef = useRef(false);
+  const previousImageRef = useRef<string | null>(null);
 
   const styles = {
     container: {
@@ -77,11 +79,26 @@ const Print: React.FC = () => {
   }, [finalImage, copies]);
 
   useEffect(() => {
+    if (!finalImage) {
+      return;
+    }
+    if (previousImageRef.current !== finalImage) {
+      previousImageRef.current = finalImage;
+      hasAutoPrintedRef.current = false;
+    }
+  }, [finalImage]);
+
+  useEffect(() => {
     const loadImageAndPrint = async () => {
       if (finalImage) {
         const dataUrl = await window.electron.getImageAsBase64(finalImage);
         setImagePreview(dataUrl);
-        handlePrint(); // Automatically print on load
+        if (!hasAutoPrintedRef.current) {
+          hasAutoPrintedRef.current = true;
+          handlePrint(); // Automatically print on load
+        } else {
+          console.log('[Print] Skipping duplicate auto print');
+        }
       } else {
         navigate('/');
       }
