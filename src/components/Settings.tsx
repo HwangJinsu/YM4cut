@@ -78,6 +78,7 @@ const Settings: React.FC = () => {
               const refreshed = await navigator.mediaDevices.enumerateDevices();
               videoDevices = refreshed.filter(device => device.kind === 'videoinput');
               tempStream.getTracks().forEach(track => track.stop());
+              console.log('[Settings] Camera permissions granted, devices refreshed', videoDevices.length);
             } catch (permissionError) {
               console.warn('[Settings] getUserMedia fallback failed', permissionError);
             }
@@ -87,6 +88,13 @@ const Settings: React.FC = () => {
         }
       }
       setCameras(videoDevices);
+      if (
+        videoDevices.length > 0 &&
+        (!settings.selectedCamera ||
+          !videoDevices.some(device => device.deviceId === settings.selectedCamera))
+      ) {
+        setSelectedCamera(videoDevices[0].deviceId);
+      }
 
       // Fetch printers
       const printerList = await electronAPI.getPrinters();
@@ -349,9 +357,17 @@ const Settings: React.FC = () => {
         <h2 style={styles.settingHeader}>📷 카메라 설정</h2>
         <select style={styles.select} value={selectedCamera} onChange={e => setSelectedCamera(e.target.value)}>
           <option value="">카메라를 선택하세요</option>
-          {cameras.map(camera => (
-            <option key={camera.deviceId} value={camera.deviceId}>{camera.label}</option>
-          ))}
+          {cameras.map((camera, index) => {
+            const label =
+              camera.label && camera.label.trim().length > 0
+                ? camera.label
+                : `카메라 ${index + 1} (${camera.deviceId.slice(0, 6)})`;
+            return (
+              <option key={camera.deviceId} value={camera.deviceId}>
+                {label}
+              </option>
+            );
+          })}
         </select>
         <div style={styles.checkboxContainer}>
           <input 
