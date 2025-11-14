@@ -20,6 +20,7 @@ const PRINT_BLEED_MM = {
   bottom: 3,
   left: 2.5,
 };
+const PRINT_RIGHT_FUDGE_MM = 2.2;
 const MICRONS_PER_INCH = 25400;
 const CAMERA_NATIVE_RATIO = 3 / 2;
 
@@ -232,10 +233,14 @@ async function prepareImageForPrint(imagePath) {
     bottom: mmToPx(PRINT_BLEED_MM.bottom),
     left: mmToPx(PRINT_BLEED_MM.left),
   };
+  const rightFudgePx = mmToPx(PRINT_RIGHT_FUDGE_MM);
 
   const printableWidth = Math.max(1, targetWidth - (marginPx.left + marginPx.right));
   const printableHeight = Math.max(1, targetHeight - (marginPx.top + marginPx.bottom));
-  const baseWidth = Math.max(1, printableWidth - (bleedPx.left + bleedPx.right));
+  const baseWidth = Math.max(
+    1,
+    printableWidth - (bleedPx.left + bleedPx.right) - rightFudgePx
+  );
   const baseHeight = Math.max(1, printableHeight - (bleedPx.top + bleedPx.bottom));
   console.log('[print-image] Preparing image for print', {
     sourceWidth: width,
@@ -249,6 +254,7 @@ async function prepareImageForPrint(imagePath) {
     baseHeight,
     marginsPx: marginPx,
     bleedPx,
+    rightFudgePx,
   });
 
   const resizedBuffer = await sharp(imagePath, { failOnError: false })
@@ -281,7 +287,7 @@ async function prepareImageForPrint(imagePath) {
   const leftoverWidth = Math.max(0, printableWidth - (extendedMeta.width || 0));
   const leftoverHeight = Math.max(0, printableHeight - (extendedMeta.height || 0));
 
-  const offsetLeft = marginPx.left + Math.floor(leftoverWidth / 2);
+  const offsetLeft = marginPx.left;
   const offsetTop = marginPx.top + Math.floor(leftoverHeight / 2);
 
   const imageBuffer = await sharp({
