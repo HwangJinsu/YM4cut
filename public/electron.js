@@ -560,10 +560,10 @@ ipcMain.handle('compose-images', async (event, images) => {
     const { buffer: templateBuffer, path: templatePath } = await resolveTemplateImage(settings);
 
     const photoLayout = [
-      { x: 30, y: 44, width: 533, height: 335 },
-      { x: 30, y: 409, width: 533, height: 340 },
-      { x: 30, y: 774, width: 533, height: 340 },
-      { x: 30, y: 1139, width: 533, height: 340 },
+      { x: 30, y: 43, width: 533, height: 340 },
+      { x: 30, y: 408, width: 533, height: 340 },
+      { x: 30, y: 773, width: 533, height: 340 },
+      { x: 30, y: 1138, width: 533, height: 340 },
     ];
 
     console.log('[compose-images] Starting image resize operations.');
