@@ -4,7 +4,10 @@ import { useLocation, useNavigate } from 'react-router-dom';
 const Print: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { finalImage } = location.state as { finalImage: string };
+  const state = location.state as { finalImage?: string; printCount?: number } | null;
+  const finalImage = state?.finalImage ?? '';
+  const printCount = Math.max(1, Math.round(state?.printCount ?? 1));
+  const copies = Math.max(1, Math.ceil(printCount / 2));
   const [printing, setPrinting] = useState(true);
   const [printError, setPrintError] = useState<string | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -63,6 +66,7 @@ const Print: React.FC = () => {
       await window.electron.printImage({
         imagePath: finalImage,
         printerName: settings.selectedPrinter,
+        copies,
       });
     } catch (error: any) {
       console.error('Error printing image:', error);
@@ -70,7 +74,7 @@ const Print: React.FC = () => {
     } finally {
       setPrinting(false);
     }
-  }, [finalImage]);
+  }, [finalImage, copies]);
 
   useEffect(() => {
     const loadImageAndPrint = async () => {

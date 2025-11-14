@@ -1,7 +1,7 @@
 export interface IElectronAPI {
   saveImage: (data: string) => Promise<string>;
   composeImages: (images: string[]) => Promise<string>;
-  printImage: (args: { imagePath: string; printerName?: string }) => Promise<void>;
+  printImage: (args: { imagePath: string; printerName?: string; copies?: number }) => Promise<void>;
   openFileDialog: () => Promise<string | null>;
   openDirectoryDialog: () => Promise<string | null>;
   saveSettings: (settings: any) => Promise<void>;

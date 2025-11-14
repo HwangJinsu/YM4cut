@@ -1,6 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 
+type CameraLocationState = {
+  baseImages?: string[];
+  reshootImages?: string[];
+  printCount?: number;
+};
+
 const Camera: React.FC = () => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -12,6 +18,7 @@ const Camera: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const baseImagesRef = useRef<string[]>([]);
+  const printCountRef = useRef<number>(1);
   const [shutterInterval, setShutterInterval] = useState<number>(5);
 
   const styles = {
@@ -112,11 +119,14 @@ const Camera: React.FC = () => {
   };
 
   useEffect(() => {
-    const state = location.state as { baseImages?: string[] } | null;
+    const state = location.state as CameraLocationState | null;
     if (state?.baseImages && Array.isArray(state.baseImages) && state.baseImages.length === 4) {
       baseImagesRef.current = state.baseImages;
     } else {
       baseImagesRef.current = [];
+    }
+    if (typeof state?.printCount === 'number' && Number.isFinite(state.printCount)) {
+      printCountRef.current = Math.max(1, Math.round(state.printCount));
     }
   }, [location.state]);
 
@@ -162,10 +172,22 @@ const Camera: React.FC = () => {
   useEffect(() => {
     if (capturedImages.length === 4) {
       const baseImages = baseImagesRef.current;
+      const sharedState = { printCount: printCountRef.current };
       if (baseImages.length > 0) {
-        navigate('/compose', { state: { baseImages: [...baseImages], reshootImages: [...capturedImages] } });
+        navigate('/compose', {
+          state: {
+            ...sharedState,
+            baseImages: [...baseImages],
+            reshootImages: [...capturedImages],
+          },
+        });
       } else {
-        navigate('/compose', { state: { baseImages: [...capturedImages] } });
+        navigate('/compose', {
+          state: {
+            ...sharedState,
+            baseImages: [...capturedImages],
+          },
+        });
       }
     }
   }, [capturedImages, navigate]);

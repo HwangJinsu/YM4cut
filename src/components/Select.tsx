@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 
 const Select: React.FC = () => {
   const [count, setCount] = useState(2);
+  const navigate = useNavigate();
 
   const styles = {
     container: {
@@ -79,6 +80,10 @@ const Select: React.FC = () => {
     e.currentTarget.style.transform = 'scale(1)';
   };
 
+  const startCapture = () => {
+    navigate('/camera', { state: { printCount: count } });
+  };
+
   return (
     <div style={styles.container}>
       <Link to="/" style={styles.backButton}>뒤로가기</Link>
@@ -101,15 +106,14 @@ const Select: React.FC = () => {
           +
         </button>
       </div>
-      <Link to="/camera">
-        <button 
-          style={styles.startButton} 
-          onMouseOver={handleMouseOver} 
-          onMouseOut={handleMouseOut}
-        >
-          촬영 시작
-        </button>
-      </Link>
+      <button 
+        style={styles.startButton} 
+        onClick={startCapture}
+        onMouseOver={handleMouseOver} 
+        onMouseOut={handleMouseOut}
+      >
+        촬영 시작
+      </button>
     </div>
   );
 };

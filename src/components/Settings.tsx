@@ -247,7 +247,7 @@ const Settings: React.FC = () => {
     if (path) {
       try {
         console.log('[Settings] Reprint requested', { path, printer: selectedPrinter });
-        await electronAPI.printImage({ imagePath: path, printerName: selectedPrinter });
+        await electronAPI.printImage({ imagePath: path, printerName: selectedPrinter, copies: 1 });
         alert('인쇄 요청을 보냈습니다.');
       } catch (error: any) {
         alert(`인쇄 실패: ${error.message}`);

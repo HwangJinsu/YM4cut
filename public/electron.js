@@ -492,15 +492,19 @@ ipcMain.handle('compose-images', async (event, images) => {
   }
 });
 
-ipcMain.handle('print-image', async (event, { imagePath, printerName }) => {
-  console.log('[print-image] Request received', { imagePath, printerName });
+ipcMain.handle('print-image', async (event, { imagePath, printerName, copies }) => {
+  const requestedCopiesRaw = Number(copies);
+  const requestedCopies = Number.isFinite(requestedCopiesRaw) && requestedCopiesRaw > 0
+    ? Math.max(1, Math.round(requestedCopiesRaw))
+    : 1;
+  console.log('[print-image] Request received', { imagePath, printerName, copies: requestedCopies });
   const targetPrinter = await resolvePrinterName(printerName);
   if (!targetPrinter) {
     throw new Error('프린터를 찾을 수 없습니다. 시스템에 프린터가 설치되어 있는지 확인해주세요.');
   }
 
   await ensurePrinterAvailable(targetPrinter);
-  console.log('[print-image] Using printer', targetPrinter);
+  console.log('[print-image] Using printer', targetPrinter, 'copies', requestedCopies);
 
   const tryNativePrint = () => new Promise((resolve, reject) => {
     try {
@@ -509,15 +513,26 @@ ipcMain.handle('print-image', async (event, { imagePath, printerName }) => {
         return reject(new Error('node-printer 모듈을 사용할 수 없습니다.'));
       }
       const device = new Printer(targetPrinter);
-      const job = device.printFile(imagePath);
-      if (!job || typeof job.once !== 'function') {
-        return reject(new Error('프린터 작업을 시작하지 못했습니다.'));
-      }
-      job.once('error', err => reject(new Error(err ? err.toString() : '알 수 없는 오류')));
-      job.once('sent', () => {
-        console.log('[print-image] Native print sent to spooler');
-        resolve();
-      });
+      let completed = 0;
+
+      const sendJob = () => {
+        const job = device.printFile(imagePath);
+        if (!job || typeof job.once !== 'function') {
+          return reject(new Error('프린터 작업을 시작하지 못했습니다.'));
+        }
+        job.once('error', err => reject(new Error(err ? err.toString() : '알 수 없는 오류')));
+        job.once('sent', () => {
+          completed += 1;
+          console.log('[print-image] Native print sent to spooler', { completed, requestedCopies });
+          if (completed >= requestedCopies) {
+            resolve();
+          } else {
+            sendJob();
+          }
+        });
+      };
+
+      sendJob();
     } catch (error) {
       reject(error);
     }
@@ -528,7 +543,7 @@ ipcMain.handle('print-image', async (event, { imagePath, printerName }) => {
       .then(prepared => {
         const { imagePath: preparedImagePath, pageSize, landscape, portrait } = prepared;
         const imageFileUrl = pathToFileURL(preparedImagePath).toString();
-        console.log('[print-image] Prepared image payload', { preparedImagePath, pageSize, landscape, portrait });
+        console.log('[print-image] Prepared image payload', { preparedImagePath, pageSize, landscape, portrait, copies: requestedCopies });
 
         const printWindow = new BrowserWindow({
           show: false,
@@ -598,7 +613,7 @@ ipcMain.handle('print-image', async (event, { imagePath, printerName }) => {
           `);
 
         const submitPrint = () => {
-          console.log('[print-image] Submitting print job via webContents.print', { pageSize, landscape, portrait });
+          console.log('[print-image] Submitting print job via webContents.print', { pageSize, landscape, portrait, copies: requestedCopies });
           printWindow.webContents.print(
             {
               silent: true,
@@ -609,6 +624,7 @@ ipcMain.handle('print-image', async (event, { imagePath, printerName }) => {
               pageSize,
               landscape: false,
               dpi: { horizontal: PRINT_DPI, vertical: PRINT_DPI },
+              copies: requestedCopies,
             },
             (success, failureReason) => {
               cleanup();
@@ -687,7 +703,7 @@ ipcMain.handle('print-image', async (event, { imagePath, printerName }) => {
 
   try {
     await tryBrowserPrint();
-    console.log('[print-image] Print request completed');
+    console.log('[print-image] Print request completed', { copies: requestedCopies });
   } catch (browserError) {
     if (lastError) {
       console.error('Fallback print error:', browserError);

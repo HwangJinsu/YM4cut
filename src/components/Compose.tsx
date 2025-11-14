@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 type ComposeState = {
   baseImages?: string[];
   reshootImages?: string[];
+  printCount?: number;
 };
 
 type ImageMeta = {
@@ -38,6 +39,7 @@ const Compose: React.FC = () => {
   const baseImages = baseImagesRef.current;
   const reshootImages = reshootImagesRef.current;
   const [allImages] = useState<string[]>(() => [...baseImages, ...reshootImages]);
+  const printCountRef = useRef<number>(Math.max(1, Math.round(state?.printCount ?? 1)));
 
   useEffect(() => {
     if (baseImages.length < MAX_SELECTION) {
@@ -154,11 +156,11 @@ const Compose: React.FC = () => {
       alert('선택한 사진을 합성 중입니다. 잠시만 기다려주세요.');
       return;
     }
-    navigate('/print', { state: { finalImage } });
+    navigate('/print', { state: { finalImage, printCount: printCountRef.current } });
   };
 
   const handleRetake = () => {
-    navigate('/camera', { state: { baseImages: [...baseImages] } });
+    navigate('/camera', { state: { baseImages: [...baseImages], printCount: printCountRef.current } });
   };
 
   const handleMouseOver = (e: React.MouseEvent<HTMLButtonElement>) => {
