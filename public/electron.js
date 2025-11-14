@@ -123,6 +123,93 @@ async function cropBufferToRatio(buffer, targetRatio, options = {}) {
   return { buffer: croppedBuffer, metadata: croppedMeta };
 }
 
+async function trimColumnsByStats(buffer, options = {}) {
+  const {
+    meanThreshold = 20,
+    stdThreshold = 6,
+    maxTrimRatio = 0.2,
+    label = 'column-trim',
+  } = options;
+
+  const { data, info } = await sharp(buffer)
+    .removeAlpha()
+    .greyscale()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+
+  if (!info.width || !info.height) {
+    return { buffer, metadata: await sharp(buffer).metadata() };
+  }
+
+  const columnSums = new Array(info.width).fill(0);
+  const columnSquares = new Array(info.width).fill(0);
+  for (let y = 0; y < info.height; y += 1) {
+    const rowOffset = y * info.width;
+    for (let x = 0; x < info.width; x += 1) {
+      const value = data[rowOffset + x];
+      columnSums[x] += value;
+      columnSquares[x] += value * value;
+    }
+  }
+
+  const columnMeans = columnSums.map(sum => sum / info.height);
+  const columnStd = columnSquares.map((sumSq, index) => {
+    const mean = columnMeans[index];
+    const variance = Math.max(0, sumSq / info.height - mean * mean);
+    return Math.sqrt(variance);
+  });
+
+  const maxTrimColumns = Math.floor(info.width * maxTrimRatio);
+
+  let leftTrim = 0;
+  while (
+    leftTrim < info.width - 1 &&
+    leftTrim < maxTrimColumns &&
+    columnMeans[leftTrim] <= meanThreshold &&
+    columnStd[leftTrim] <= stdThreshold
+  ) {
+    leftTrim += 1;
+  }
+
+  let rightTrim = 0;
+  while (
+    rightTrim < info.width - 1 - leftTrim &&
+    rightTrim < maxTrimColumns &&
+    columnMeans[info.width - 1 - rightTrim] <= meanThreshold &&
+    columnStd[info.width - 1 - rightTrim] <= stdThreshold
+  ) {
+    rightTrim += 1;
+  }
+
+  if (leftTrim === 0 && rightTrim === 0) {
+    return { buffer, metadata: await sharp(buffer).metadata() };
+  }
+
+  const trimmedWidth = info.width - leftTrim - rightTrim;
+  if (trimmedWidth <= 1) {
+    return { buffer, metadata: await sharp(buffer).metadata() };
+  }
+
+  console.log('[compose-images]', label, 'applied', {
+    leftTrim,
+    rightTrim,
+    meanThreshold,
+    stdThreshold,
+  });
+
+  const croppedBuffer = await sharp(buffer)
+    .extract({
+      left: leftTrim,
+      top: 0,
+      width: trimmedWidth,
+      height: info.height,
+    })
+    .toBuffer();
+
+  const croppedMeta = await sharp(croppedBuffer).metadata();
+  return { buffer: croppedBuffer, metadata: croppedMeta };
+}
+
 async function prepareImageForPrint(imagePath) {
   const desiredLongPx = PRINT_LONG_INCHES * PRINT_DPI;
   const desiredShortPx = PRINT_SHORT_INCHES * PRINT_DPI;
@@ -493,70 +580,14 @@ ipcMain.handle('compose-images', async (event, images) => {
         }
       }
 
-      try {
-        const { data, info } = await sharp(workingBuffer)
-          .removeAlpha()
-          .greyscale()
-          .raw()
-          .toBuffer({ resolveWithObject: true });
-
-        const columnMeans = new Array(info.width).fill(0);
-        for (let y = 0; y < info.height; y += 1) {
-          const rowOffset = y * info.width;
-          for (let x = 0; x < info.width; x += 1) {
-            columnMeans[x] += data[rowOffset + x];
-          }
-        }
-        for (let x = 0; x < info.width; x += 1) {
-          columnMeans[x] /= info.height;
-        }
-        const sortedMeans = [...columnMeans].sort((a, b) => a - b);
-        const highMean = sortedMeans[Math.max(0, Math.floor(sortedMeans.length * 0.9) - 1)];
-        const dynamicThreshold = Math.max(12, highMean * 0.3);
-        const maxTrimColumns = Math.floor(info.width * 0.2);
-
-        let leftBound = 0;
-        while (
-          leftBound < info.width - 1 &&
-          columnMeans[leftBound] <= dynamicThreshold
-        ) {
-          leftBound += 1;
-        }
-        let rightBound = info.width - 1;
-        while (
-          rightBound > leftBound &&
-          columnMeans[rightBound] <= dynamicThreshold
-        ) {
-          rightBound -= 1;
-        }
-
-        const leftTrim = Math.min(leftBound, maxTrimColumns);
-        const rightTrim = info.width - 1 - rightBound;
-        const appliedRightTrim = Math.min(rightTrim, maxTrimColumns);
-
-        if (leftTrim > 0 || appliedRightTrim > 0) {
-          const trimmedWidth = info.width - leftTrim - appliedRightTrim;
-          if (trimmedWidth > layout.width * 0.5) {
-            console.log('[compose-images] Column trim applied', {
-              index,
-              leftTrim,
-              rightTrim: appliedRightTrim,
-              threshold: dynamicThreshold,
-            });
-            workingBuffer = await sharp(workingBuffer)
-              .extract({
-                left: leftTrim,
-                top: 0,
-                width: trimmedWidth,
-                height: info.height,
-              })
-              .toBuffer();
-            workingMeta = await sharp(workingBuffer).metadata();
-          }
-        }
-      } catch (columnTrimError) {
-        console.warn('[compose-images] Column trim analysis failed', { index, error: columnTrimError.message });
-      }
+      const columnTrim = await trimColumnsByStats(workingBuffer, {
+        meanThreshold: 22,
+        stdThreshold: 7,
+        maxTrimRatio: 0.25,
+        label: `column-trim-${index}`,
+      });
+      workingBuffer = columnTrim.buffer;
+      workingMeta = columnTrim.metadata;
       const nativeCrop = await cropBufferToRatio(workingBuffer, CAMERA_NATIVE_RATIO, {
         tolerance: 0.002,
         label: `native-ratio-${index}`,
