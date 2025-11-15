@@ -51,6 +51,7 @@ function createWindow() {
     width: 1080,
     height: 1920,
     kiosk: true,
+    icon: path.join(__dirname, 'assets', 'app-icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
