@@ -559,13 +559,27 @@ ipcMain.handle('compose-images', async (event, images) => {
     console.log('[compose-images] Loaded settings:', settings);
 
     const { buffer: templateBuffer, path: templatePath } = await resolveTemplateImage(settings);
+    
+    // Get template dimensions to calculate relative layout
+    const templateMeta = await sharp(templateBuffer).metadata();
+    const tWidth = templateMeta.width;
+    const tHeight = templateMeta.height;
 
-    const photoLayout = [
-      { x: 30, y: 43, width: 533, height: 340 },
-      { x: 30, y: 408, width: 533, height: 340 },
-      { x: 30, y: 773, width: 533, height: 340 },
-      { x: 30, y: 1138, width: 533, height: 340 },
+    // Relative positions based on reference template size (591x1746)
+    // These ratios ensure the photos are placed correctly regardless of the template resolution
+    const layoutConfig = [
+      { x: 30 / 591, y: 43 / 1746, w: 533 / 591, h: 340 / 1746 },
+      { x: 30 / 591, y: 408 / 1746, w: 533 / 591, h: 340 / 1746 },
+      { x: 30 / 591, y: 773 / 1746, w: 533 / 591, h: 340 / 1746 },
+      { x: 30 / 591, y: 1138 / 1746, w: 533 / 591, h: 340 / 1746 },
     ];
+
+    const photoLayout = layoutConfig.map(l => ({
+      x: Math.round(l.x * tWidth),
+      y: Math.round(l.y * tHeight),
+      width: Math.round(l.w * tWidth),
+      height: Math.round(l.h * tHeight),
+    }));
 
     console.log('[compose-images] Starting image resize operations.');
     const compositeOperations = await Promise.all(images.map(async (image, index) => {
