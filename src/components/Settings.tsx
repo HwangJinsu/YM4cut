@@ -225,19 +225,20 @@ const Settings: React.FC = () => {
     },
     licenseButton: {
       marginTop: '20px',
-      padding: '10px 20px',
+      padding: '8px 16px',
       backgroundColor: 'transparent',
-      color: '#666',
-      fontSize: '16px',
-      border: '1px solid #ccc',
+      color: '#888',
+      fontSize: '14px',
+      border: '1px solid #ddd',
       borderRadius: '8px',
       cursor: 'pointer',
     },
     backLink: {
       marginTop: '20px',
-      fontSize: '20px',
+      fontSize: '24px',
       color: 'var(--text-color)',
       textDecoration: 'none',
+      fontWeight: 'bold' as 'bold',
     },
     modalOverlay: {
       position: 'fixed' as 'fixed',
@@ -347,9 +348,14 @@ const Settings: React.FC = () => {
     }
   };
 
+  const handleOpenOutputPath = async () => {
+    if (!electronAPI) return;
+    await electronAPI.openPath(outputPath);
+  };
+
   const handleReprint = async () => {
     if (!electronAPI) return;
-    const path = await electronAPI.openFileDialog();
+    const path = await electronAPI.openFileDialog(outputPath);
     if (path) {
       try {
         console.log('[Settings] Reprint requested', { path, printer: selectedPrinter });
@@ -500,9 +506,14 @@ const Settings: React.FC = () => {
 
       <div style={styles.settingItem}>
         <h2 style={styles.settingHeader}>🗂️ 네컷 이미지 저장 경로</h2>
-        <button style={styles.button} onClick={handleSelectOutputPath} onMouseOver={handleMouseOver} onMouseOut={handleMouseOut}>
-          경로 선택
-        </button>
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <button style={styles.button} onClick={handleSelectOutputPath} onMouseOver={handleMouseOver} onMouseOut={handleMouseOut}>
+            경로 선택
+          </button>
+          <button style={{ ...styles.button, backgroundColor: '#555' }} onClick={handleOpenOutputPath} onMouseOver={handleMouseOver} onMouseOut={handleMouseOut}>
+            폴더 열기
+          </button>
+        </div>
         <div style={styles.pathDisplay}>{outputPath || '미설정 (기본 경로에 저장됩니다)'}</div>
       </div>
 

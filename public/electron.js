@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const path = require('path');
 const { pathToFileURL } = require('url');
 const fs = require('fs');
@@ -936,11 +936,30 @@ ipcMain.handle('quit-app', async () => {
   app.quit();
 });
 
-ipcMain.handle('open-file-dialog', async () => {
-  const { canceled, filePaths } = await dialog.showOpenDialog({
+ipcMain.handle('open-path', async (event, dirPath) => {
+  let targetPath = dirPath;
+  if (!targetPath) {
+    if (isDev) {
+      targetPath = path.join(app.getAppPath(), 'output');
+    } else {
+      targetPath = path.join(app.getPath('pictures'), 'YM4Cut');
+    }
+    if (!fs.existsSync(targetPath)) {
+      fs.mkdirSync(targetPath, { recursive: true });
+    }
+  }
+  await shell.openPath(targetPath);
+});
+
+ipcMain.handle('open-file-dialog', async (event, defaultPath) => {
+  const options = {
     properties: ['openFile'],
     filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg'] }],
-  });
+  };
+  if (defaultPath) {
+    options.defaultPath = defaultPath;
+  }
+  const { canceled, filePaths } = await dialog.showOpenDialog(options);
   if (canceled) {
     return null;
   }
