@@ -223,13 +223,91 @@ const Settings: React.FC = () => {
       boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
       transition: 'transform 0.2s ease-out',
     },
+    licenseButton: {
+      marginTop: '20px',
+      padding: '10px 20px',
+      backgroundColor: 'transparent',
+      color: '#666',
+      fontSize: '16px',
+      border: '1px solid #ccc',
+      borderRadius: '8px',
+      cursor: 'pointer',
+    },
     backLink: {
       marginTop: '20px',
       fontSize: '20px',
       color: 'var(--text-color)',
       textDecoration: 'none',
     },
+    modalOverlay: {
+      position: 'fixed' as 'fixed',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+      display: 'flex',
+      justifyContent: 'center',
+      alignItems: 'center',
+      zIndex: 1000,
+    },
+    modalContent: {
+      backgroundColor: 'white',
+      padding: '30px',
+      borderRadius: '12px',
+      maxWidth: '600px',
+      width: '90%',
+      maxHeight: '80vh',
+      overflowY: 'auto' as 'auto',
+      boxShadow: '0 4px 20px rgba(0, 0, 0, 0.2)',
+      position: 'relative' as 'relative',
+    },
+    modalTitle: {
+      fontSize: '24px',
+      marginBottom: '20px',
+      borderBottom: '1px solid #eee',
+      paddingBottom: '10px',
+    },
+    modalCloseButton: {
+      position: 'absolute' as 'absolute',
+      top: '15px',
+      right: '15px',
+      background: 'none',
+      border: 'none',
+      fontSize: '24px',
+      cursor: 'pointer',
+      color: '#666',
+    },
+    licenseItem: {
+      marginBottom: '15px',
+      borderBottom: '1px solid #f5f5f5',
+      paddingBottom: '10px',
+    },
+    licenseName: {
+      fontWeight: 'bold' as 'bold',
+      fontSize: '18px',
+    },
+    licenseType: {
+      color: '#666',
+      fontSize: '14px',
+      marginTop: '4px',
+    },
   };
+
+  const LICENSES = [
+    { name: 'React', type: 'MIT License' },
+    { name: 'React DOM', type: 'MIT License' },
+    { name: 'React Router', type: 'MIT License' },
+    { name: 'Redux Toolkit', type: 'MIT License' },
+    { name: 'React Redux', type: 'MIT License' },
+    { name: 'Electron', type: 'MIT License' },
+    { name: 'Electron Builder', type: 'MIT License' },
+    { name: 'Node Printer', type: 'MIT License' },
+    { name: 'Sharp', type: 'Apache License 2.0' },
+    { name: 'TypeScript', type: 'Apache License 2.0' },
+  ];
+
+  const [showLicenseModal, setShowLicenseModal] = useState(false);
 
   const handleSelectMainImage = async () => {
     if (!electronAPI) return;
@@ -460,7 +538,29 @@ const Settings: React.FC = () => {
       <button style={styles.saveButton} onClick={handleSave} onMouseOver={handleMouseOver} onMouseOut={handleMouseOut}>
         설정 저장
       </button>
+
       <Link to="/" style={styles.backLink}>홈으로 돌아가기</Link>
+
+      <button style={styles.licenseButton} onClick={() => setShowLicenseModal(true)}>
+        오픈소스 라이선스
+      </button>
+
+      {showLicenseModal && (
+        <div style={styles.modalOverlay} onClick={() => setShowLicenseModal(false)}>
+          <div style={styles.modalContent} onClick={e => e.stopPropagation()}>
+            <button style={styles.modalCloseButton} onClick={() => setShowLicenseModal(false)}>×</button>
+            <h2 style={styles.modalTitle}>오픈소스 라이선스</h2>
+            <div>
+              {LICENSES.map((license, index) => (
+                <div key={index} style={styles.licenseItem}>
+                  <div style={styles.licenseName}>{license.name}</div>
+                  <div style={styles.licenseType}>{license.type}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
