@@ -1,6 +1,8 @@
 {
   "name": "ym4cut",
   "version": "0.1.2",
+  "description": "Life4Cut style photo booth application",
+  "author": "Hwang Jinsu",
   "private": true,
   "dependencies": {
     "@reduxjs/toolkit": "^2.10.1",
