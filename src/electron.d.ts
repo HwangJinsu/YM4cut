@@ -5,6 +5,7 @@ export interface IElectronAPI {
   openFileDialog: (defaultPath?: string) => Promise<string | null>;
   openDirectoryDialog: () => Promise<string | null>;
   openPath: (path: string) => Promise<void>;
+  getDefaultOutputPath: () => Promise<string>;
   saveSettings: (settings: any) => Promise<void>;
   getSettings: () => Promise<any>;
   getPrinters: () => Promise<any[]>;

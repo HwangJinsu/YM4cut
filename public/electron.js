@@ -688,11 +688,7 @@ ipcMain.handle('compose-images', async (event, images) => {
     if (settings.outputPath) {
       outputDir = settings.outputPath;
     } else {
-      if (isDev) {
-        outputDir = path.join(app.getAppPath(), 'output');
-      } else {
-        outputDir = path.join(app.getPath('pictures'), 'YM4Cut');
-      }
+      outputDir = resolveDefaultOutputPath();
     }
 
     if (!fs.existsSync(outputDir)) {
@@ -936,14 +932,24 @@ ipcMain.handle('quit-app', async () => {
   app.quit();
 });
 
+function resolveDefaultOutputPath() {
+  let outputDir;
+  if (isDev) {
+    outputDir = path.join(app.getAppPath(), 'output');
+  } else {
+    outputDir = path.join(app.getPath('pictures'), 'YM4Cut');
+  }
+  return outputDir;
+}
+
+ipcMain.handle('get-default-output-path', async () => {
+  return resolveDefaultOutputPath();
+});
+
 ipcMain.handle('open-path', async (event, dirPath) => {
   let targetPath = dirPath;
   if (!targetPath) {
-    if (isDev) {
-      targetPath = path.join(app.getAppPath(), 'output');
-    } else {
-      targetPath = path.join(app.getPath('pictures'), 'YM4Cut');
-    }
+    targetPath = resolveDefaultOutputPath();
     if (!fs.existsSync(targetPath)) {
       fs.mkdirSync(targetPath, { recursive: true });
     }

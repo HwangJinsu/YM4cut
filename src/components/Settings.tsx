@@ -355,7 +355,11 @@ const Settings: React.FC = () => {
 
   const handleReprint = async () => {
     if (!electronAPI) return;
-    const path = await electronAPI.openFileDialog(outputPath);
+    let targetPath = outputPath;
+    if (!targetPath) {
+      targetPath = await electronAPI.getDefaultOutputPath();
+    }
+    const path = await electronAPI.openFileDialog(targetPath);
     if (path) {
       try {
         console.log('[Settings] Reprint requested', { path, printer: selectedPrinter });
