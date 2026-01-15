@@ -1,6 +1,6 @@
 {
-  "name": "ym4cut-app",
-  "version": "0.1.0",
+  "name": "ym4cut",
+  "version": "0.1.2",
   "private": true,
   "dependencies": {
     "@reduxjs/toolkit": "^2.10.1",
