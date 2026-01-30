@@ -134,6 +134,17 @@ const Settings: React.FC = () => {
       color: 'var(--text-color)',
       marginBottom: '40px',
     },
+    infoButton: {
+      position: 'absolute' as 'absolute',
+      top: '40px',
+      left: '40px',
+      fontSize: '32px',
+      background: 'none',
+      border: 'none',
+      cursor: 'pointer',
+      opacity: 0.6,
+      transition: 'opacity 0.2s',
+    },
     settingItem: {
       marginBottom: '40px',
       width: '100%',
@@ -389,6 +400,11 @@ const Settings: React.FC = () => {
     alert('설정이 저장되었습니다!');
   };
 
+  const handleInfoClick = () => {
+    if (!electronAPI) return;
+    electronAPI.openExternal('https://www.youtube.com/playlist?list=PLs36bSFfggCD1LTDmTPm8M7O89RdjbcJ-');
+  };
+
   const handleMouseOver = (e: React.MouseEvent<HTMLButtonElement>) => {
     e.currentTarget.style.transform = 'scale(1.02)';
   };
@@ -399,6 +415,15 @@ const Settings: React.FC = () => {
 
   return (
     <div style={styles.container}>
+      <button 
+        style={styles.infoButton} 
+        onClick={handleInfoClick}
+        onMouseOver={e => e.currentTarget.style.opacity = '1'}
+        onMouseOut={e => e.currentTarget.style.opacity = '0.6'}
+        title="도움말 (YouTube)"
+      >
+        ℹ️
+      </button>
       <h1 style={styles.title}>⚙️ 설정</h1>
 
       <div style={styles.settingItem}>

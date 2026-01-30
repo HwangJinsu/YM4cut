@@ -957,6 +957,10 @@ ipcMain.handle('open-path', async (event, dirPath) => {
   await shell.openPath(targetPath);
 });
 
+ipcMain.handle('open-external', async (event, url) => {
+  await shell.openExternal(url);
+});
+
 ipcMain.handle('open-file-dialog', async (event, defaultPath) => {
   const options = {
     properties: ['openFile'],

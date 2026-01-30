@@ -1,47 +1,133 @@
-# Getting Started with Create React App
+# YM4cut - Life4Cut Style Photo Booth
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+**YM4cut** is a desktop application designed for self-service photo booths, inspired by the popular "Life4Cut" style. Built with **Electron** and **React**, it runs on Windows 10/11 and provides a seamless experience for taking 4 consecutive photos, compositing them into a strip template, and automatically printing the result.
 
-## Available Scripts
+## 📸 Key Features
 
-In the project directory, you can run:
+*   **Touch-Friendly UI:** Intuitive interface designed for kiosk touchscreens.
+*   **Auto-Capture Workflow:** Automatic countdown and capture for 4 sequential shots.
+*   **Live Preview:** Real-time camera feed with countdown overlay.
+*   **Instant Composition:** Fast processing to combine photos with a customizable template (1:3 ratio) and generate a 2-up print layout (2:3 ratio).
+*   **Auto Printing:** Seamless integration with printers (optimized for Canon Selphy CP series) for immediate output.
+*   **Customizable:** Easily update the main screen image and photo template via settings.
 
-### `npm start`
+## 🛠 Tech Stack
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in the browser.
+*   **Runtime:** [Electron](https://www.electronjs.org/) (Desktop integration)
+*   **Frontend:** [React](https://reactjs.org/) (UI), [Redux Toolkit](https://redux-toolkit.js.org/) (State Management)
+*   **Image Processing:** [Sharp](https://sharp.pixelplumbing.com/) (High-performance image manipulation)
+*   **Hardware Control:** `node-printer` (Printing), HTML5 Media Devices API (Camera)
+*   **Language:** TypeScript
 
-The page will reload if you make edits.\
-You will also see any lint errors in the console.
+## 📋 Prerequisites
 
-### `npm test`
+### Hardware
+*   **PC:** Windows 10 or 11 (Core i5, 8GB RAM recommended).
+*   **Camera:** USB Webcam (1080p, 30fps support recommended).
+*   **Printer:** Photo printer (e.g., Canon Selphy CP1300/1500) connected via USB or Network.
+*   **Display:** Touchscreen monitor (1080x1920 Portrait mode recommended).
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+### Software
+*   **Node.js:** v18.x or higher.
+*   **Git:** For version control.
+*   **Printer Driver:** Ensure the official driver for your printer is installed and set as default or configured correctly.
 
-### `npm run build`
+## 🚀 Quick Start for Users
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+If you have received the **YM4cut_setup.exe** installation file, follow these steps:
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+1.  **Run the Installer:** Double-click `YM4cut_setup.exe` to begin the installation. Follow the on-screen instructions to install the application.
+2.  **Connect Hardware:** Ensure your USB Camera and Photo Printer are connected to the PC and powered on.
+3.  **Launch the App:** Open **YM4cut** from your desktop or Start menu.
+4.  **Initial Setup:**
+    *   Click the **Gear Icon** (Settings) on the bottom left of the Home screen.
+    *   Verify the camera preview and printer status.
+    *   Upload your desired background and template (1:3 ratio).
+5.  **Start Shooting:** Return to the Home screen and click **Start**!
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+---
 
-### `npm run eject`
+## 🛠 For Developers (Build from Source)
 
-**Note: this is a one-way operation. Once you `eject`, you can’t go back!**
+If you want to contribute or build the application yourself, follow these steps:
 
-If you aren’t satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+### 1. Prerequisites
+*   **Node.js:** v18.x or higher.
+*   **Build Tools:** Windows Build Tools (for native modules like `sharp` and `node-printer`).
+*   **Git:** For version control.
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you’re on your own.
+### 2. Installation
+```bash
+git clone https://github.com/your-username/ym4cut.git
+cd ym4cut
+npm install
+```
 
-You don’t have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn’t feel obligated to use this feature. However we understand that this tool wouldn’t be useful if you couldn’t customize it when you are ready for it.
+### 3. Run in Development Mode
+```bash
+npm run electron:start
+```
 
-## Learn More
+### 4. Build the Installer (`YM4cut_setup.exe`)
+To create the distributable installer:
+```bash
+npm run electron:build
+```
+The generated `YM4cut_setup.exe` will be located in the `dist` folder.
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+## 📂 Project Structure
 
-To learn React, check out the [React documentation](https://reactjs.org/).
-# YM4cut
+```
+YM4cut/
+├── captures/           # Temporary storage for raw camera captures
+├── config/             # Configuration files (settings.json)
+├── output/             # Storage for final composited images
+├── public/             # Static assets & Electron main process
+│   ├── electron.js     # Electron Main Process entry point
+│   └── preload.js      # Preload script for IPC
+├── src/                # React Source Code
+│   ├── components/     # UI Components (Camera, Print, etc.)
+│   ├── assets/         # App assets (icons, default images)
+│   └── ...
+└── ...
+```
+
+## ⚙️ Configuration
+
+The application allows basic configuration through the **Settings** screen (accessible via the gear icon on the Home screen).
+
+*   **Main Image:** Change the background/promotional image displayed on the start screen.
+*   **Template:** Upload a new frame template.
+    *   **Required Ratio:** 1:3
+    *   **Format:** PNG (transparency supported) or JPG.
+
+*Advanced configuration can be manually edited in `config/settings.json` (if implemented).*
+
+## ⚠️ Troubleshooting
+
+*   **Camera not working:** Check privacy settings in Windows to ensure apps are allowed to access the camera. Verify the USB connection.
+*   **Printer not printing:** Ensure the printer is online, has paper/ink, and is set as the default printer in Windows. Check the "Printers & Scanners" system menu.
+*   **Native Module Errors:** If you see errors related to `sharp` or `node-printer` during install, try rebuilding them:
+    ```bash
+    npm rebuild --build-from-source
+    ```
+
+## 📜 Open Source Licenses
+
+
+
+This project utilizes the following open-source software:
+
+
+
+*   **Electron, React, Redux Toolkit, React Router, electron-is-dev, node-printer, concurrently, electron-builder**: Licensed under the [MIT License](https://opensource.org/licenses/MIT).
+
+*   **Sharp, TypeScript**: Licensed under the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0).
+
+
+
+## 📝 License
+
+
+
+This project is for personal or educational use.

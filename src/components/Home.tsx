@@ -60,6 +60,17 @@ const Home: React.FC = () => {
       boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
       transition: 'transform 0.2s ease-out',
     },
+    copyright: {
+      position: 'absolute' as 'absolute',
+      bottom: '20px',
+      width: '100%',
+      textAlign: 'center' as 'center',
+      color: 'white',
+      fontSize: '20px',
+      textShadow: '0 0 10px rgba(0,0,0,0.8), 0 0 20px rgba(0,0,0,0.5)',
+      pointerEvents: 'none' as 'none',
+      opacity: 0.9,
+    },
   };
 
   const handleMouseOver = (e: React.MouseEvent<HTMLButtonElement>) => {
@@ -90,6 +101,9 @@ const Home: React.FC = () => {
           ⚙️
         </button>
       </Link>
+      <div style={styles.copyright}>
+        © 2025 용중네컷(YM4cut) · Hwang Jinsu. All rights reserved.
+      </div>
     </div>
   );
 };
