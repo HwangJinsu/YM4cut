@@ -1,7 +1,9 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 
 const Print: React.FC = () => {
+  const { t } = useTranslation();
   const location = useLocation();
   const navigate = useNavigate();
   const state = location.state as { finalImage?: string; printCount?: number } | null;
@@ -72,11 +74,15 @@ const Print: React.FC = () => {
       });
     } catch (error: any) {
       console.error('Error printing image:', error);
-      setPrintError(error.message || '인쇄 중 오류가 발생했습니다.');
+      // Extract i18n key (e.g., "err_printer_not_found") from potentially prefixed string
+      const msg = error.message || '';
+      const matchedKey = msg.match(/err_[a-z_]+/)?.[0];
+      const translatedMsg = matchedKey ? t(matchedKey) : (msg || t('print_failed'));
+      setPrintError(translatedMsg);
     } finally {
       setPrinting(false);
     }
-  }, [finalImage, copies]);
+  }, [finalImage, copies, t]);
 
   useEffect(() => {
     if (!finalImage) {
@@ -120,10 +126,10 @@ const Print: React.FC = () => {
 
   return (
     <div style={styles.container}>
-      {imagePreview && <img src={imagePreview} style={styles.finalImage} alt="최종 결과" />}
+      {imagePreview && <img src={imagePreview} style={styles.finalImage} alt={t('final_result')} />}
       
-      {printing && <div style={styles.message}>📄 사진을 인쇄하고 있습니다...</div>}
-      {!printing && !printError && <div style={styles.message}>✅ 인쇄 요청을 보냈습니다.</div>}
+      {printing && <div style={styles.message}>{t('printing')}</div>}
+      {!printing && !printError && <div style={styles.message}>{t('print_sent')}</div>}
       {printError && <div style={styles.error}>⚠️ {printError}</div>}
 
       <div style={styles.buttonContainer}>
@@ -134,7 +140,7 @@ const Print: React.FC = () => {
           onMouseOver={handleMouseOver}
           onMouseOut={handleMouseOut}
         >
-          다시 인쇄
+          {t('reprint_btn')}
         </button>
         <button 
           style={{...styles.button, backgroundColor: 'var(--secondary-color)'}} 
@@ -142,7 +148,7 @@ const Print: React.FC = () => {
           onMouseOver={handleMouseOver}
           onMouseOut={handleMouseOut}
         >
-          홈으로
+          {t('go_home')}
         </button>
       </div>
     </div>

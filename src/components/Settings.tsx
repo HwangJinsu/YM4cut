@@ -1,7 +1,48 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
+
+const LANGUAGES = [
+  { code: 'en', label: 'English' },
+  { code: 'ko', label: '한국어' },
+  { code: 'ja', label: '日本語' },
+  { code: 'zh', label: '中文 (简体)' },
+  { code: 'zh-TW', label: '中文 (繁體)' },
+  { code: 'de', label: 'Deutsch' },
+  { code: 'fr', label: 'Français' },
+  { code: 'it', label: 'Italiano' },
+  { code: 'es', label: 'Español' },
+  { code: 'pt', label: 'Português' },
+  { code: 'sv', label: 'Svenska' },
+  { code: 'fi', label: 'Suomi' },
+  { code: 'no', label: 'Norsk' },
+  { code: 'da', label: 'Dansk' },
+  { code: 'ru', label: 'Русский' },
+  { code: 'pl', label: 'Polski' },
+  { code: 'cs', label: 'Čeština' },
+  { code: 'ro', label: 'Română' },
+  { code: 'uk', label: 'Українська' },
+  { code: 'hu', label: 'Magyar' },
+  { code: 'bg', label: 'Български' },
+  { code: 'vi', label: 'Tiếng Việt' },
+  { code: 'th', label: 'ไทย' },
+  { code: 'hi', label: 'हिन्दी' },
+  { code: 'ar', label: 'العربية' },
+  { code: 'fa', label: 'فارسی' },
+  { code: 'mn', label: 'Монгол' },
+  { code: 'id', label: 'Bahasa Indonesia' },
+  { code: 'ms', label: 'Bahasa Melayu' },
+  { code: 'tl', label: 'Filipino' },
+  { code: 'kk', label: 'Қазақша' },
+  { code: 'uz', label: 'Oʻzbekcha' },
+  { code: 'bn', label: 'বাংলা' },
+  { code: 'ur', label: 'اردو' },
+  { code: 'tr', label: 'Türkçe' },
+];
 
 const Settings: React.FC = () => {
+  const { t, i18n } = useTranslation();
+  const navigate = useNavigate();
   const [mainImage, setMainImage] = useState<string | null>(null);
   const [templateImage, setTemplateImage] = useState<string | null>(null);
   const [mainImagePreview, setMainImagePreview] = useState<string | null>(null);
@@ -12,6 +53,7 @@ const Settings: React.FC = () => {
   const [selectedCamera, setSelectedCamera] = useState<string>('');
   const [selectedPrinter, setSelectedPrinter] = useState<string>('');
   const [outputPath, setOutputPath] = useState<string>('');
+  const [currentLanguage, setCurrentLanguage] = useState<string>(i18n.language.split('-')[0] || 'ko');
 
   const [brightness, setBrightness] = useState<number>(1.05);
   const [contrast, setContrast] = useState<number>(1);
@@ -20,94 +62,74 @@ const Settings: React.FC = () => {
   const [shutterTimer, setShutterTimer] = useState<number>(5);
   const electronAPI = typeof window !== 'undefined' ? window?.electron : undefined;
 
+  const [isDirty, setIsDirty] = useState(false);
+  const [showExitModal, setShowExitModal] = useState(false);
+  const [initialSettings, setInitialSettings] = useState<any>(null);
+
+  // Initial load
   useEffect(() => {
     const fetchDevicesAndSettings = async () => {
-      // Fetch settings
-      if (!electronAPI) {
-        console.warn('[Settings] electron API unavailable; running in browser context');
-        return;
-      }
-      const settings = await electronAPI.getSettings();
-      if (settings.mainImage) {
-        setMainImage(settings.mainImage);
-        const preview = await electronAPI.getImageAsBase64(settings.mainImage);
-        setMainImagePreview(preview);
-      }
-      if (settings.templateImage) {
-        setTemplateImage(settings.templateImage);
-        const preview = await electronAPI.getImageAsBase64(settings.templateImage);
-        setTemplateImagePreview(preview);
-      }
-      if (settings.selectedCamera) {
-        setSelectedCamera(settings.selectedCamera);
-      }
-      if (settings.selectedPrinter) {
-        setSelectedPrinter(settings.selectedPrinter);
-      }
-      if (settings.outputPath) {
-        setOutputPath(settings.outputPath);
-      }
-      if (settings.brightness) {
-        setBrightness(parseFloat(settings.brightness));
-      }
-      if (settings.contrast) {
-        setContrast(parseFloat(settings.contrast));
-      }
-      if (settings.saturation) {
-        setSaturation(parseFloat(settings.saturation));
-      }
-      if (settings.isCameraFlipped) {
-        setIsCameraFlipped(settings.isCameraFlipped);
-      }
-      if (settings.shutterTimer) {
-        setShutterTimer(Number(settings.shutterTimer));
-      }
-
-      // Fetch cameras
-      let videoDevices: MediaDeviceInfo[] = [];
-      if (navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {
-        try {
-          const devices = await navigator.mediaDevices.enumerateDevices();
-          videoDevices = devices.filter(device => device.kind === 'videoinput');
-          if (videoDevices.length === 0 && navigator.mediaDevices.getUserMedia) {
-            try {
-              const tempStream = await navigator.mediaDevices.getUserMedia({
-                video: true,
-                audio: false,
-              });
-              const refreshed = await navigator.mediaDevices.enumerateDevices();
-              videoDevices = refreshed.filter(device => device.kind === 'videoinput');
-              tempStream.getTracks().forEach(track => track.stop());
-              console.log('[Settings] Camera permissions granted, devices refreshed', videoDevices.length);
-            } catch (permissionError) {
-              console.warn('[Settings] getUserMedia fallback failed', permissionError);
-            }
-          }
-        } catch (deviceError) {
-          console.warn('[Settings] Failed to enumerate camera devices', deviceError);
+      if (!electronAPI) return;
+      try {
+        const settings = await electronAPI.getSettings();
+        setInitialSettings(settings);
+        
+        if (settings.mainImage) {
+          setMainImage(settings.mainImage);
+          const preview = await electronAPI.getImageAsBase64(settings.mainImage);
+          setMainImagePreview(preview);
         }
-      }
-      setCameras(videoDevices);
-      if (
-        videoDevices.length > 0 &&
-        (!settings.selectedCamera ||
-          !videoDevices.some(device => device.deviceId === settings.selectedCamera))
-      ) {
-        setSelectedCamera(videoDevices[0].deviceId);
-      }
+        if (settings.templateImage) {
+          setTemplateImage(settings.templateImage);
+          const preview = await electronAPI.getImageAsBase64(settings.templateImage);
+          setTemplateImagePreview(preview);
+        }
+        if (settings.selectedCamera) setSelectedCamera(settings.selectedCamera);
+        if (settings.selectedPrinter) setSelectedPrinter(settings.selectedPrinter);
+        if (settings.outputPath) setOutputPath(settings.outputPath);
+        if (settings.brightness) setBrightness(parseFloat(settings.brightness));
+        if (settings.contrast) setContrast(parseFloat(settings.contrast));
+        if (settings.saturation) setSaturation(parseFloat(settings.saturation));
+        if (settings.isCameraFlipped) setIsCameraFlipped(settings.isCameraFlipped);
+        if (settings.shutterTimer) setShutterTimer(Number(settings.shutterTimer));
+        
+        if (settings.language) {
+          setCurrentLanguage(settings.language);
+          if (i18n.language !== settings.language) {
+            i18n.changeLanguage(settings.language);
+          }
+        }
 
-      // Fetch printers
-      const printerList = await electronAPI.getPrinters();
-      setPrinters(printerList);
+        // Fetch cameras
+        let videoDevices: MediaDeviceInfo[] = [];
+        if (navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {
+          try {
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            videoDevices = devices.filter(device => device.kind === 'videoinput');
+          } catch (deviceError) {
+            console.warn('[Settings] Failed to enumerate camera devices', deviceError);
+          }
+        }
+        setCameras(videoDevices);
+        if (videoDevices.length > 0 && !settings.selectedCamera) {
+          setSelectedCamera(videoDevices[0].deviceId);
+        }
+
+        // Fetch printers
+        const printerList = await electronAPI.getPrinters();
+        setPrinters(printerList);
+      } catch (err) {
+        console.error('[Settings] Error fetching settings:', err);
+      }
     };
     fetchDevicesAndSettings();
-  }, [electronAPI]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
+  // Update printers periodically
   useEffect(() => {
     const refreshPrinters = async () => {
-      if (!electronAPI) {
-        return;
-      }
+      if (!electronAPI) return;
       try {
         const printerList = await electronAPI.getPrinters();
         setPrinters(printerList);
@@ -115,10 +137,72 @@ const Settings: React.FC = () => {
         console.warn('[Settings] Failed to refresh printers', err);
       }
     };
-    refreshPrinters();
     const interval = setInterval(refreshPrinters, 10000);
     return () => clearInterval(interval);
   }, [electronAPI]);
+
+  // Track changes
+  useEffect(() => {
+    if (!initialSettings) return;
+    const hasChanged = 
+      mainImage !== (initialSettings.mainImage || null) ||
+      templateImage !== (initialSettings.templateImage || null) ||
+      selectedCamera !== (initialSettings.selectedCamera || '') ||
+      selectedPrinter !== (initialSettings.selectedPrinter || '') ||
+      outputPath !== (initialSettings.outputPath || '') ||
+      brightness !== (parseFloat(initialSettings.brightness) || 1.05) ||
+      contrast !== (parseFloat(initialSettings.contrast) || 1) ||
+      saturation !== (parseFloat(initialSettings.saturation) || 1.1) ||
+      isCameraFlipped !== (!!initialSettings.isCameraFlipped) ||
+      shutterTimer !== (Number(initialSettings.shutterTimer) || 5) ||
+      currentLanguage !== (initialSettings.language || 'ko');
+    setIsDirty(hasChanged);
+  }, [
+    mainImage, templateImage, selectedCamera, selectedPrinter, 
+    outputPath, brightness, contrast, saturation, 
+    isCameraFlipped, shutterTimer, currentLanguage, initialSettings
+  ]);
+
+  const handleLanguageChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const newLang = e.target.value;
+    setCurrentLanguage(newLang);
+    i18n.changeLanguage(newLang);
+    localStorage.setItem('i18nextLng', newLang);
+  };
+
+  const handleSave = async () => {
+    if (!electronAPI) return;
+    const newSettings = {
+      mainImage,
+      templateImage,
+      selectedCamera,
+      selectedPrinter,
+      outputPath,
+      brightness,
+      contrast,
+      saturation,
+      isCameraFlipped,
+      shutterTimer,
+      language: currentLanguage,
+    };
+    await electronAPI.saveSettings(newSettings);
+    setInitialSettings(newSettings);
+    setIsDirty(false);
+    alert(t('settings_saved'));
+  };
+
+  const handleBackToHome = () => {
+    if (isDirty) {
+      setShowExitModal(true);
+    } else {
+      navigate('/');
+    }
+  };
+
+  const handleInfoClick = () => {
+    if (!electronAPI) return;
+    electronAPI.openExternal('https://www.youtube.com/playlist?list=PLs36bSFfggCD1LTDmTPm8M7O89RdjbcJ-');
+  };
 
   const styles = {
     container: {
@@ -184,10 +268,12 @@ const Settings: React.FC = () => {
     },
     select: {
       width: '100%',
-      padding: '20px',
+      padding: '30px 20px',
       fontSize: '24px',
       borderRadius: '12px',
       border: '1px solid #ccc',
+      backgroundColor: 'white',
+      appearance: 'none' as 'none',
     },
     sliderContainer: {
       display: 'flex',
@@ -250,6 +336,9 @@ const Settings: React.FC = () => {
       color: 'var(--text-color)',
       textDecoration: 'none',
       fontWeight: 'bold' as 'bold',
+      background: 'none',
+      border: 'none',
+      cursor: 'pointer',
     },
     modalOverlay: {
       position: 'fixed' as 'fixed',
@@ -373,36 +462,15 @@ const Settings: React.FC = () => {
     const path = await electronAPI.openFileDialog(targetPath);
     if (path) {
       try {
-        console.log('[Settings] Reprint requested', { path, printer: selectedPrinter });
         await electronAPI.printImage({ imagePath: path, printerName: selectedPrinter, copies: 1 });
-        alert('인쇄 요청을 보냈습니다.');
+        alert(t('print_sent'));
       } catch (error: any) {
-        alert(`인쇄 실패: ${error.message}`);
+        const msg = error.message || '';
+        const matchedKey = msg.match(/err_[a-z_]+/)?.[0];
+        const translatedMsg = matchedKey ? t(matchedKey) : (msg || t('print_failed'));
+        alert(`${t('print_failed')}: ${translatedMsg}`);
       }
     }
-  };
-
-  const handleSave = async () => {
-    if (!electronAPI) return;
-    const newSettings = {
-      mainImage,
-      templateImage,
-      selectedCamera,
-      selectedPrinter,
-      outputPath,
-      brightness,
-      contrast,
-      saturation,
-      isCameraFlipped,
-      shutterTimer,
-    };
-    await electronAPI.saveSettings(newSettings);
-    alert('설정이 저장되었습니다!');
-  };
-
-  const handleInfoClick = () => {
-    if (!electronAPI) return;
-    electronAPI.openExternal('https://www.youtube.com/playlist?list=PLs36bSFfggCD1LTDmTPm8M7O89RdjbcJ-');
   };
 
   const handleMouseOver = (e: React.MouseEvent<HTMLButtonElement>) => {
@@ -420,16 +488,27 @@ const Settings: React.FC = () => {
         onClick={handleInfoClick}
         onMouseOver={e => e.currentTarget.style.opacity = '1'}
         onMouseOut={e => e.currentTarget.style.opacity = '0.6'}
-        title="도움말 (YouTube)"
+        title={t('help_youtube')}
       >
         ℹ️
       </button>
-      <h1 style={styles.title}>⚙️ 설정</h1>
+      <h1 style={styles.title}>⚙️ {t('settings')}</h1>
 
       <div style={styles.settingItem}>
-        <h2 style={styles.settingHeader}>🎨 이미지 효과</h2>
+        <h2 style={styles.settingHeader}>🌐 Language (언어 설정)</h2>
+        <select style={styles.select} value={currentLanguage} onChange={handleLanguageChange}>
+          {LANGUAGES.map(lang => (
+            <option key={lang.code} value={lang.code}>
+              {lang.label}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div style={styles.settingItem}>
+        <h2 style={styles.settingHeader}>🎨 {t('image_effects')}</h2>
         <div style={styles.sliderContainer}>
-          <label style={styles.sliderLabel}>밝기: {brightness.toFixed(2)}</label>
+          <label style={styles.sliderLabel}>{t('brightness')}: {brightness.toFixed(2)}</label>
           <input 
             type="range" 
             min="0.5" 
@@ -441,7 +520,7 @@ const Settings: React.FC = () => {
           />
         </div>
         <div style={styles.sliderContainer}>
-          <label style={styles.sliderLabel}>대비: {contrast.toFixed(2)}</label>
+          <label style={styles.sliderLabel}>{t('contrast')}: {contrast.toFixed(2)}</label>
           <input 
             type="range" 
             min="0.5" 
@@ -453,7 +532,7 @@ const Settings: React.FC = () => {
           />
         </div>
         <div style={styles.sliderContainer}>
-          <label style={styles.sliderLabel}>채도: {saturation.toFixed(2)}</label>
+          <label style={styles.sliderLabel}>{t('saturation')}: {saturation.toFixed(2)}</label>
           <input 
             type="range" 
             min="0.5" 
@@ -467,14 +546,14 @@ const Settings: React.FC = () => {
       </div>
 
       <div style={styles.settingItem}>
-        <h2 style={styles.settingHeader}>📷 카메라 설정</h2>
+        <h2 style={styles.settingHeader}>📷 {t('camera_settings')}</h2>
         <select style={styles.select} value={selectedCamera} onChange={e => setSelectedCamera(e.target.value)}>
-          <option value="">카메라를 선택하세요</option>
+          <option value="">{t('select_camera')}</option>
           {cameras.map((camera, index) => {
             const label =
               camera.label && camera.label.trim().length > 0
                 ? camera.label
-                : `카메라 ${index + 1} (${camera.deviceId.slice(0, 6)})`;
+                : `${t('camera')} ${index + 1} (${camera.deviceId.slice(0, 6)})`;
             return (
               <option key={camera.deviceId} value={camera.deviceId}>
                 {label}
@@ -490,10 +569,10 @@ const Settings: React.FC = () => {
             onChange={e => setIsCameraFlipped(e.target.checked)}
             style={styles.checkbox}
           />
-          <label htmlFor="cameraFlip" style={styles.sliderLabel}>카메라 좌우반전</label>
+          <label htmlFor="cameraFlip" style={styles.sliderLabel}>{t('camera_flip')}</label>
         </div>
         <div style={styles.sliderInline}>
-          <label style={styles.sliderLabel}>셔터 타이머</label>
+          <label style={styles.sliderLabel}>{t('shutter_timer')}</label>
           <input
             type="range"
             min="5"
@@ -503,14 +582,14 @@ const Settings: React.FC = () => {
             onChange={e => setShutterTimer(parseInt(e.target.value, 10))}
             style={{ ...styles.slider, maxWidth: '280px' }}
           />
-          <span style={styles.sliderValue}>{shutterTimer}초</span>
+          <span style={styles.sliderValue}>{shutterTimer}{t('seconds')}</span>
         </div>
       </div>
 
       <div style={styles.settingItem}>
-        <h2 style={styles.settingHeader}>🖨️ 프린터 장치</h2>
+        <h2 style={styles.settingHeader}>🖨️ {t('printer_device')}</h2>
         <select style={styles.select} value={selectedPrinter} onChange={e => setSelectedPrinter(e.target.value)}>
-          <option value="">프린터를 선택하세요</option>
+          <option value="">{t('select_printer')}</option>
           {printers.map(printer => {
             if (typeof printer === 'string') {
               return (
@@ -534,62 +613,96 @@ const Settings: React.FC = () => {
       </div>
 
       <div style={styles.settingItem}>
-        <h2 style={styles.settingHeader}>🗂️ 네컷 이미지 저장 경로</h2>
+        <h2 style={styles.settingHeader}>🗂️ {t('storage_path')}</h2>
         <div style={{ display: 'flex', gap: '10px' }}>
           <button style={styles.button} onClick={handleSelectOutputPath} onMouseOver={handleMouseOver} onMouseOut={handleMouseOut}>
-            경로 선택
+            {t('select_path')}
           </button>
           <button style={{ ...styles.button, backgroundColor: '#555' }} onClick={handleOpenOutputPath} onMouseOver={handleMouseOver} onMouseOut={handleMouseOut}>
-            폴더 열기
+            {t('open_folder')}
           </button>
         </div>
-        <div style={styles.pathDisplay}>{outputPath || '미설정 (기본 경로에 저장됩니다)'}</div>
+        <div style={styles.pathDisplay}>{outputPath || t('not_set_default')}</div>
       </div>
 
       <div style={styles.settingItem}>
-        <h2 style={styles.settingHeader}>🖼️ 메인 화면 이미지</h2>
+        <h2 style={styles.settingHeader}>🖼️ {t('main_image')}</h2>
         <button style={styles.button} onClick={handleSelectMainImage} onMouseOver={handleMouseOver} onMouseOut={handleMouseOut}>
-          이미지 선택
+          {t('select_image')}
         </button>
         <button style={{...styles.button, backgroundColor: '#888'}} onClick={handleDeselectMainImage} onMouseOver={handleMouseOver} onMouseOut={handleMouseOut}>
-          선택 해제
+          {t('deselect')}
         </button>
         {mainImagePreview && <img src={mainImagePreview} style={styles.imagePreview} alt="Main" />}
       </div>
 
       <div style={styles.settingItem}>
-        <h2 style={styles.settingHeader}>🧩 사진 템플릿 이미지</h2>
+        <h2 style={styles.settingHeader}>🧩 {t('template_image')}</h2>
         <button style={styles.button} onClick={handleSelectTemplateImage} onMouseOver={handleMouseOver} onMouseOut={handleMouseOut}>
-          템플릿 선택
+          {t('template_image')}
         </button>
         <button style={{...styles.button, backgroundColor: '#888'}} onClick={handleDeselectTemplateImage} onMouseOver={handleMouseOver} onMouseOut={handleMouseOut}>
-          선택 해제
+          {t('deselect')}
         </button>
         {templateImagePreview && <img src={templateImagePreview} style={styles.imagePreview} alt="Template" />}
       </div>
 
       <div style={styles.settingItem}>
-        <h2 style={styles.settingHeader}>🔁🖨️ 이미지 파일 재인쇄</h2>
+        <h2 style={styles.settingHeader}>🔁🖨️ {t('reprint')}</h2>
         <button style={styles.button} onClick={handleReprint} onMouseOver={handleMouseOver} onMouseOut={handleMouseOut}>
-          파일 선택하여 인쇄
+          {t('select_file_print')}
         </button>
       </div>
 
       <button style={styles.saveButton} onClick={handleSave} onMouseOver={handleMouseOver} onMouseOut={handleMouseOut}>
-        설정 저장
+        {t('save_settings')}
       </button>
 
-      <Link to="/" style={styles.backLink}>홈으로 돌아가기</Link>
+      <button onClick={handleBackToHome} style={styles.backLink}>
+        {t('back_to_home')}
+      </button>
+
+      {showExitModal && (
+        <div style={styles.modalOverlay}>
+          <div style={styles.modalContent}>
+            <h2 style={styles.modalTitle}>{t('unsaved_changes')}</h2>
+            <p style={{fontSize: '20px', marginBottom: '30px', color: 'var(--text-color)'}}>{t('unsaved_changes_msg')}</p>
+            <div style={{display: 'flex', gap: '20px'}}>
+              <button 
+                style={{...styles.button, backgroundColor: 'var(--primary-color)'}} 
+                onClick={async () => {
+                  await handleSave();
+                  navigate('/');
+                }}
+              >
+                {t('save')}
+              </button>
+              <button 
+                style={{...styles.button, backgroundColor: 'var(--secondary-color)'}} 
+                onClick={() => navigate('/')}
+              >
+                {t('exit')}
+              </button>
+              <button 
+                style={{...styles.button, backgroundColor: '#888'}} 
+                onClick={() => setShowExitModal(false)}
+              >
+                {t('cancel')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <button style={styles.licenseButton} onClick={() => setShowLicenseModal(true)}>
-        오픈소스 라이선스
+        {t('open_source_licenses')}
       </button>
 
       {showLicenseModal && (
         <div style={styles.modalOverlay} onClick={() => setShowLicenseModal(false)}>
           <div style={styles.modalContent} onClick={e => e.stopPropagation()}>
             <button style={styles.modalCloseButton} onClick={() => setShowLicenseModal(false)}>×</button>
-            <h2 style={styles.modalTitle}>오픈소스 라이선스</h2>
+            <h2 style={styles.modalTitle}>{t('open_source_licenses')}</h2>
             <div>
               {LICENSES.map((license, index) => (
                 <div key={index} style={styles.licenseItem}>

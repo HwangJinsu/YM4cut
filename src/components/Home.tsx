@@ -1,21 +1,33 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import defaultMainImage from '../assets/images/main-default.png';
 
 const Home: React.FC = () => {
+  const { t, i18n } = useTranslation();
   const [mainImage, setMainImage] = useState<string>(defaultMainImage);
 
   useEffect(() => {
     const fetchSettings = async () => {
+      if (!window.electron) return;
+      
       const settings = await window.electron.getSettings();
+      
+      // Load main image
       if (settings.mainImage) {
         const dataUrl = await window.electron.getImageAsBase64(settings.mainImage);
-        if (dataUrl) {
-          setMainImage(dataUrl);
-        }
+        if (dataUrl) setMainImage(dataUrl);
+      }
+      
+      // Only change language if it's different from current
+      if (settings.language && i18n.language !== settings.language) {
+        console.log('[Home] Initializing language from settings:', settings.language);
+        i18n.changeLanguage(settings.language);
       }
     };
     fetchSettings();
+    // Run only once on mount to avoid loops
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const styles = {
@@ -89,7 +101,7 @@ const Home: React.FC = () => {
           onMouseOver={handleMouseOver} 
           onMouseOut={handleMouseOut}
         >
-          시작하기
+          {t('start')}
         </button>
       </Link>
       <Link to="/settings">
@@ -97,6 +109,7 @@ const Home: React.FC = () => {
           style={styles.settingsButton} 
           onMouseOver={handleMouseOver} 
           onMouseOut={handleMouseOut}
+          title={t('settings')}
         >
           ⚙️
         </button>

@@ -445,9 +445,9 @@ const PRINTER_STATUS_NOT_AVAILABLE = 0x00001000;
 
 function getPrinterStatusDescription(status) {
   if (status == null) return null;
-  if (status & PRINTER_STATUS_OFFLINE) return '프린터가 오프라인 상태입니다.';
-  if (status & PRINTER_STATUS_ERROR) return '프린터에 오류가 발생했습니다.';
-  if (status & PRINTER_STATUS_NOT_AVAILABLE) return '프린터를 사용할 수 없습니다.';
+  if (status & PRINTER_STATUS_OFFLINE) return 'err_printer_offline';
+  if (status & PRINTER_STATUS_ERROR) return 'err_printer_error';
+  if (status & PRINTER_STATUS_NOT_AVAILABLE) return 'err_printer_not_available';
   return null;
 }
 
@@ -455,7 +455,7 @@ async function ensurePrinterAvailable(targetPrinter) {
   const devices = await enumeratePrinters();
   const device = devices.find(d => d.name === targetPrinter);
   if (!device) {
-    throw new Error('선택한 프린터를 찾을 수 없습니다. 연결 상태와 드라이버를 확인해주세요.');
+    throw new Error('err_printer_not_found');
   }
   console.log('[print-image] Printer status', { name: device.name, status: device.status, source: device.source });
   if (typeof device.status === 'number') {
@@ -715,7 +715,7 @@ ipcMain.handle('print-image', async (event, { imagePath, printerName, copies }) 
   console.log('[print-image] Request received', { imagePath, printerName, copies: requestedCopies });
   const targetPrinter = await resolvePrinterName(printerName);
   if (!targetPrinter) {
-    throw new Error('프린터를 찾을 수 없습니다. 시스템에 프린터가 설치되어 있는지 확인해주세요.');
+    throw new Error('err_printer_not_found');
   }
 
   await ensurePrinterAvailable(targetPrinter);
@@ -725,7 +725,7 @@ ipcMain.handle('print-image', async (event, { imagePath, printerName, copies }) 
     try {
       const Printer = PrinterModule;
       if (!Printer || typeof Printer !== 'function') {
-        return reject(new Error('node-printer 모듈을 사용할 수 없습니다.'));
+        return reject(new Error('err_node_printer_unavailable'));
       }
       const device = new Printer(targetPrinter);
       let completed = 0;
@@ -733,9 +733,9 @@ ipcMain.handle('print-image', async (event, { imagePath, printerName, copies }) 
       const sendJob = () => {
         const job = device.printFile(imagePath);
         if (!job || typeof job.once !== 'function') {
-          return reject(new Error('프린터 작업을 시작하지 못했습니다.'));
+          return reject(new Error('err_print_job_start_failed'));
         }
-        job.once('error', err => reject(new Error(err ? err.toString() : '알 수 없는 오류')));
+        job.once('error', err => reject(new Error(err ? err.toString() : 'err_unknown')));
         job.once('sent', () => {
           completed += 1;
           console.log('[print-image] Native print sent to spooler', { completed, requestedCopies });

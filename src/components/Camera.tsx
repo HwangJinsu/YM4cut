@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 
 type CameraLocationState = {
   baseImages?: string[];
@@ -7,7 +8,10 @@ type CameraLocationState = {
   printCount?: number;
 };
 
+const TARGET_RATIO = 533 / 340;
+
 const Camera: React.FC = () => {
+  const { t } = useTranslation();
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [countdown, setCountdown] = useState<number | null>(null);
@@ -15,6 +19,7 @@ const Camera: React.FC = () => {
   const [shutter, setShutter] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [isFlipped, setIsFlipped] = useState(false);
+  const [videoDimensions, setVideoDimensions] = useState({ width: 0, height: 0 });
   const navigate = useNavigate();
   const location = useLocation();
   const baseImagesRef = useRef<string[]>([]);
@@ -31,22 +36,35 @@ const Camera: React.FC = () => {
       width: '100vw',
       backgroundColor: '#000',
       position: 'relative' as 'relative',
+      overflow: 'hidden',
     },
     progressBarContainer: {
       position: 'absolute' as 'absolute',
-      top: '20px',
-      width: '80%',
-      height: '10px',
-      backgroundColor: '#555',
-      borderRadius: '5px',
+      top: '30px',
+      width: '60%',
+      height: '12px',
+      backgroundColor: 'rgba(255,255,255,0.2)',
+      borderRadius: '6px',
       overflow: 'hidden' as 'hidden',
-      zIndex: 10,
+      zIndex: 20,
+      boxShadow: '0 2px 10px rgba(0,0,0,0.3)',
     },
     progressBar: {
       width: `${(capturedImages.length / 4) * 100}%`,
       height: '100%',
       backgroundColor: 'var(--primary-color)',
       transition: 'width 0.5s ease-in-out',
+    },
+    videoWrapper: {
+      position: 'absolute' as 'absolute',
+      top: 0,
+      left: 0,
+      width: '100vw',
+      height: '100vh',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 1,
     },
     video: {
       width: '100%',
@@ -60,26 +78,36 @@ const Camera: React.FC = () => {
     countdown: {
       position: 'absolute' as 'absolute',
       color: 'white',
-      fontSize: '120pt',
+      fontSize: '180pt',
       fontWeight: 'bold',
-      textShadow: '0 0 20px rgba(0,0,0,0.5)',
+      textShadow: '0 0 30px rgba(0,0,0,0.8)',
+      zIndex: 15,
     },
     errorText: {
       position: 'absolute' as 'absolute',
-      color: 'red',
+      color: '#ff4d4d',
       fontSize: '24pt',
       textAlign: 'center' as 'center',
       maxWidth: '80%',
+      zIndex: 10,
+      backgroundColor: 'rgba(0,0,0,0.7)',
+      padding: '20px',
+      borderRadius: '16px',
     },
     backButton: {
       position: 'absolute' as 'absolute',
       top: '40px',
-      left: '20px',
-      fontSize: '20px',
+      left: '40px',
+      fontSize: '28px',
       color: 'white',
       cursor: 'pointer',
       textDecoration: 'none',
-      zIndex: 10,
+      zIndex: 20,
+      background: 'rgba(0,0,0,0.5)',
+      padding: '12px 24px',
+      borderRadius: '16px',
+      fontWeight: 'bold' as 'bold',
+      transition: 'background 0.2s',
     },
     startOverlay: {
       position: 'absolute' as 'absolute',
@@ -90,20 +118,22 @@ const Camera: React.FC = () => {
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      zIndex: 5,
+      zIndex: 10,
+      backgroundColor: 'rgba(0,0,0,0.3)',
     },
     startButton: {
-      width: '260px',
-      height: '110px',
+      width: '320px',
+      height: '130px',
       backgroundColor: 'var(--primary-color)',
       color: 'white',
-      fontSize: '28pt',
+      fontSize: '36pt',
       border: 'none',
-      borderRadius: '16px',
+      borderRadius: '24px',
       cursor: 'pointer',
-      boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
+      boxShadow: '0 10px 40px rgba(0,0,0,0.4)',
       animation: 'pulse 2s infinite',
       pointerEvents: 'auto' as 'auto',
+      fontWeight: 'bold' as 'bold',
     },
     shutter: {
       position: 'absolute' as 'absolute',
@@ -115,7 +145,68 @@ const Camera: React.FC = () => {
       opacity: 0,
       transition: 'opacity 0.1s ease-out',
       pointerEvents: 'none' as 'none',
+      zIndex: 30,
     },
+  };
+
+  useEffect(() => {
+    const handleLoadedMetadata = () => {
+      if (videoRef.current) {
+        setVideoDimensions({
+          width: videoRef.current.videoWidth,
+          height: videoRef.current.videoHeight
+        });
+      }
+    };
+    const video = videoRef.current;
+    if (video) {
+      video.addEventListener('loadedmetadata', handleLoadedMetadata);
+    }
+    return () => {
+      if (video) video.removeEventListener('loadedmetadata', handleLoadedMetadata);
+    };
+  }, []);
+
+  const getRedLineStyle = () => {
+    if (videoDimensions.width === 0) return { display: 'none' };
+    
+    const vW = videoDimensions.width;
+    const vH = videoDimensions.height;
+    const vRatio = vW / vH;
+    
+    const cW = window.innerWidth;
+    const cH = window.innerHeight;
+    const cRatio = cW / cH;
+    
+    let scale;
+    if (vRatio > cRatio) {
+      scale = cH / vH;
+    } else {
+      scale = cW / vW;
+    }
+    
+    let captureW, captureH;
+    if (vRatio > TARGET_RATIO) {
+      captureH = vH;
+      captureW = vH * TARGET_RATIO;
+    } else {
+      captureW = vW;
+      captureH = captureW / TARGET_RATIO;
+    }
+    
+    return {
+      position: 'absolute' as 'absolute',
+      top: '50%',
+      left: '50%',
+      transform: 'translate(-50%, -50%)',
+      width: `${captureW * scale}px`,
+      height: `${captureH * scale}px`,
+      border: '6px solid #ff3b30',
+      boxShadow: '0 0 0 5000px rgba(0,0,0,0.5)',
+      zIndex: 5,
+      pointerEvents: 'none' as 'none',
+      borderRadius: '4px',
+    };
   };
 
   useEffect(() => {
@@ -134,28 +225,23 @@ const Camera: React.FC = () => {
     const getCamera = async () => {
       try {
         const settings = await window.electron.getSettings();
-        if (settings.isCameraFlipped) {
-          setIsFlipped(true);
-        }
+        if (settings.isCameraFlipped) setIsFlipped(true);
         if (settings.shutterTimer) {
           setShutterInterval(Math.min(10, Math.max(5, parseInt(settings.shutterTimer, 10))));
         }
-        const desiredAspectRatio = 533 / 340;
+        
         const videoConstraints: MediaStreamConstraints['video'] = {
-          aspectRatio: desiredAspectRatio,
           width: { ideal: 1920 },
-          height: { ideal: Math.round(1920 / desiredAspectRatio) },
+          height: { ideal: 1080 },
         };
         if (settings.selectedCamera) {
           videoConstraints.deviceId = { exact: settings.selectedCamera };
         }
         const stream = await navigator.mediaDevices.getUserMedia({ video: videoConstraints });
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-        }
+        if (videoRef.current) videoRef.current.srcObject = stream;
       } catch (err) {
         console.error("Error accessing camera: ", err);
-        setCameraError('카메라를 찾을 수 없거나 접근 권한이 없습니다. 앱 설정과 카메라 연결을 확인해주세요.');
+        setCameraError(t('camera_not_found'));
       }
     };
 
@@ -167,164 +253,61 @@ const Camera: React.FC = () => {
         stream.getTracks().forEach(track => track.stop());
       }
     };
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [t]);
 
   useEffect(() => {
     if (capturedImages.length === 4) {
       const baseImages = baseImagesRef.current;
       const sharedState = { printCount: printCountRef.current };
-      if (baseImages.length > 0) {
-        navigate('/compose', {
-          state: {
-            ...sharedState,
-            baseImages: [...baseImages],
-            reshootImages: [...capturedImages],
-          },
-        });
-      } else {
-        navigate('/compose', {
-          state: {
-            ...sharedState,
-            baseImages: [...capturedImages],
-          },
-        });
-      }
+      navigate('/compose', {
+        state: {
+          ...sharedState,
+          baseImages: baseImages.length > 0 ? [...baseImages] : [...capturedImages],
+          reshootImages: baseImages.length > 0 ? [...capturedImages] : undefined,
+        },
+      });
     }
   }, [capturedImages, navigate]);
 
-  const triggerShutter = () => {
-    setShutter(true);
-    setTimeout(() => setShutter(false), 200);
-  };
-
   const capture = async () => {
-    triggerShutter();
+    setShutter(true);
+    setTimeout(() => setShutter(false), 150);
+
     if (videoRef.current && canvasRef.current) {
       const video = videoRef.current;
       const canvas = canvasRef.current;
-      const targetRatio = 3 / 2;
-      const videoWidth = video.videoWidth;
-      const videoHeight = video.videoHeight;
-      const videoRatio = videoWidth / videoHeight;
+      const vW = video.videoWidth;
+      const vH = video.videoHeight;
+      const vRatio = vW / vH;
 
-      let sx = 0;
-      let sy = 0;
-      let sw = videoWidth;
-      let sh = videoHeight;
-
-      if (videoRatio > targetRatio) {
-        sw = Math.round(videoHeight * targetRatio);
-        sx = Math.max(0, Math.round((videoWidth - sw) / 2));
-      } else if (videoRatio < targetRatio) {
-        sh = Math.round(videoWidth / targetRatio);
-        sy = Math.max(0, Math.round((videoHeight - sh) / 2));
+      let sx, sy, sw, sh;
+      if (vRatio > TARGET_RATIO) {
+        sw = vH * TARGET_RATIO;
+        sh = vH;
+        sx = (vW - sw) / 2;
+        sy = 0;
+      } else {
+        sw = vW;
+        sh = vW / TARGET_RATIO;
+        sx = 0;
+        sy = (vH - sh) / 2;
       }
 
-      canvas.width = sw;
-      canvas.height = sh;
-      const context = canvas.getContext('2d');
-      if (!context) {
-        return;
+      canvas.width = 1066; // Standardized width
+      canvas.height = 680; // Standardized height (1066 / TARGET_RATIO)
+      
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      if (isFlipped) {
+        ctx.translate(canvas.width, 0);
+        ctx.scale(-1, 1);
       }
 
-      context.drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+      ctx.drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
 
-      const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
-      const { width, height, data } = imageData;
-
-      const maxTrimColumns = Math.floor(width * 0.25);
-      const meanThreshold = 24;
-      const stdThreshold = 7;
-
-      const columnSums = new Array(width).fill(0);
-      const columnSquares = new Array(width).fill(0);
-      for (let y = 0; y < height; y += 1) {
-        const rowOffset = y * width * 4;
-        for (let x = 0; x < width; x += 1) {
-          const offset = rowOffset + x * 4;
-          const r = data[offset];
-          const g = data[offset + 1];
-          const b = data[offset + 2];
-          const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-          columnSums[x] += luminance;
-          columnSquares[x] += luminance * luminance;
-        }
-      }
-
-      const columnMeans = columnSums.map(sum => sum / height);
-      const columnStd = columnSquares.map((sumSq, index) => {
-        const mean = columnMeans[index];
-        const variance = Math.max(0, sumSq / height - mean * mean);
-        return Math.sqrt(variance);
-      });
-
-      let leftTrim = 0;
-      while (
-        leftTrim < width - 1 &&
-        leftTrim < maxTrimColumns &&
-        columnMeans[leftTrim] <= meanThreshold &&
-        columnStd[leftTrim] <= stdThreshold
-      ) {
-        leftTrim += 1;
-      }
-
-      let rightTrim = 0;
-      while (
-        rightTrim < width - 1 - leftTrim &&
-        rightTrim < maxTrimColumns &&
-        columnMeans[width - 1 - rightTrim] <= meanThreshold &&
-        columnStd[width - 1 - rightTrim] <= stdThreshold
-      ) {
-        rightTrim += 1;
-      }
-
-      let cropX = leftTrim;
-      let cropWidth = width - leftTrim - rightTrim;
-      let cropY = 0;
-      let cropHeight = height;
-
-      if (cropWidth < 10) {
-        cropX = 0;
-        cropWidth = width;
-      }
-
-      const cropRatio = cropWidth / cropHeight;
-      if (cropRatio > targetRatio) {
-        const desiredWidth = Math.max(1, Math.round(cropHeight * targetRatio));
-        const excess = cropWidth - desiredWidth;
-        cropX += Math.floor(excess / 2);
-        cropWidth = desiredWidth;
-      } else if (cropRatio < targetRatio) {
-        const desiredHeight = Math.max(1, Math.round(cropWidth / targetRatio));
-        const excess = cropHeight - desiredHeight;
-        cropY += Math.floor(excess / 2);
-        cropHeight = desiredHeight;
-      }
-
-      cropX = Math.max(0, Math.min(cropX, width - cropWidth));
-      cropY = Math.max(0, Math.min(cropY, height - cropHeight));
-
-      const processedCanvas = document.createElement('canvas');
-      processedCanvas.width = cropWidth;
-      processedCanvas.height = cropHeight;
-      const processedContext = processedCanvas.getContext('2d');
-      if (!processedContext) {
-        return;
-      }
-
-      processedContext.drawImage(
-        canvas,
-        cropX,
-        cropY,
-        cropWidth,
-        cropHeight,
-        0,
-        0,
-        cropWidth,
-        cropHeight
-      );
-
-      const dataUrl = processedCanvas.toDataURL('image/png');
+      const dataUrl = canvas.toDataURL('image/png');
       const imagePath = await window.electron.saveImage(dataUrl);
       setCapturedImages(prev => [...prev, imagePath]);
     }
@@ -332,10 +315,8 @@ const Camera: React.FC = () => {
 
   const startCaptureSequence = () => {
     let captureCount = 0;
-    const intervalSeconds = Math.min(10, Math.max(5, Math.round(shutterInterval)));
-
     const sequence = () => {
-      let count = intervalSeconds;
+      let count = shutterInterval;
       setCountdown(count);
       const countdownInterval = setInterval(() => {
         count -= 1;
@@ -344,15 +325,12 @@ const Camera: React.FC = () => {
           setCountdown(null);
           capture();
           captureCount += 1;
-          if (captureCount < 4) {
-            setTimeout(sequence, 500);
-          }
+          if (captureCount < 4) setTimeout(sequence, 800);
         } else {
           setCountdown(count);
         }
       }, 1000);
     };
-
     sequence();
   };
 
@@ -361,20 +339,26 @@ const Camera: React.FC = () => {
       <div style={styles.progressBarContainer}>
         <div style={styles.progressBar}></div>
       </div>
-      <Link to="/select" style={styles.backButton}>뒤로가기</Link>
-      {cameraError ? (
-        <div style={styles.errorText}>{cameraError}</div>
-      ) : (
-        <video ref={videoRef} style={styles.video} autoPlay playsInline />
-      )}
+      
+      <Link to="/select" style={styles.backButton}>{t('back')}</Link>
+      
+      <div style={styles.videoWrapper}>
+        {cameraError ? (
+          <div style={styles.errorText}>{cameraError}</div>
+        ) : (
+          <video ref={videoRef} style={styles.video} autoPlay playsInline />
+        )}
+        <div style={getRedLineStyle()} />
+      </div>
+
       <canvas ref={canvasRef} style={styles.canvas} />
       <div style={{...styles.shutter, opacity: shutter ? 1 : 0}}></div>
-      {countdown !== null && countdown > 0 && (
-        <div style={styles.countdown}>{countdown}</div>
-      )}
+      
+      {countdown !== null && <div style={styles.countdown}>{countdown}</div>}
+      
       {capturedImages.length === 0 && countdown === null && !cameraError && (
         <div style={styles.startOverlay}>
-          <button style={styles.startButton} onClick={startCaptureSequence}>촬영 시작</button>
+          <button style={styles.startButton} onClick={startCaptureSequence}>{t('take_photo')}</button>
         </div>
       )}
     </div>

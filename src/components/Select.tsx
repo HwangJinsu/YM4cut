@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 
 const Select: React.FC = () => {
+  const { t } = useTranslation();
   const [count, setCount] = useState(2);
   const navigate = useNavigate();
 
@@ -86,7 +88,8 @@ const Select: React.FC = () => {
 
   return (
     <div style={styles.container}>
-      <Link to="/" style={styles.backButton}>뒤로가기</Link>
+      <Link to="/" style={styles.backButton}>{t('back')}</Link>
+      <h2 style={{fontSize: '32px', marginBottom: '20px', color: 'var(--text-color)'}}>{t('select_print_count')}</h2>
       <div style={styles.countContainer}>
         <button 
           style={styles.countButton} 
@@ -112,7 +115,7 @@ const Select: React.FC = () => {
         onMouseOver={handleMouseOver} 
         onMouseOut={handleMouseOut}
       >
-        촬영 시작
+        {t('take_photo')}
       </button>
     </div>
   );

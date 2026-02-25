@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 
 type ComposeState = {
   baseImages?: string[];
@@ -30,6 +31,7 @@ const PREVIEW_RATIOS = [
 ];
 
 const Compose: React.FC = () => {
+  const { t } = useTranslation();
   const location = useLocation();
   const navigate = useNavigate();
   const state = location.state as ComposeState | undefined;
@@ -125,7 +127,7 @@ const Compose: React.FC = () => {
         setFinalImage(finalImagePath);
       } catch (error: any) {
         console.error('Error composing images:', error);
-        setComposeError(`이미지 합성에 실패했습니다: ${error.message ?? error}`);
+        setComposeError(`${t('print_failed')}: ${error.message ?? error}`);
         setFinalImage(null);
         lastSelectionKey.current = '';
       } finally {
@@ -134,7 +136,7 @@ const Compose: React.FC = () => {
     };
 
     compose();
-  }, [selectedIndexes, allImages]);
+  }, [selectedIndexes, allImages, t]);
 
   const toggleSelection = (index: number) => {
     setSelectedIndexes(prev => {
@@ -153,7 +155,7 @@ const Compose: React.FC = () => {
 
   const goToPrint = () => {
     if (!finalImage) {
-      alert('선택한 사진을 합성 중입니다. 잠시만 기다려주세요.');
+      alert(t('composing'));
       return;
     }
     navigate('/print', { state: { finalImage, printCount: printCountRef.current } });
@@ -371,15 +373,15 @@ const Compose: React.FC = () => {
       <div style={styles.content}>
         <div style={styles.instructions}>
           {reshootImages.length > 0
-            ? '총 8장의 사진이 준비되었습니다. 마음에 드는 4장을 순서대로 선택해 주세요.'
-            : '촬영된 사진을 확인하고 필요하면 재촬영을 진행하세요.'}
+            ? t('eight_images_ready')
+            : t('check_photos_retake')}
           <span style={styles.selectionCount}>
             {selectedIndexes.length}/{MAX_SELECTION}
           </span>
         </div>
 
         <div style={styles.previewTitle}>
-          {allImages.length > MAX_SELECTION ? '8컷 미리보기' : '4컷 미리보기'}
+          {allImages.length > MAX_SELECTION ? t('eight_preview') : t('four_preview')}
         </div>
 
         <div style={styles.zoomControls}>
@@ -395,7 +397,7 @@ const Compose: React.FC = () => {
           >
             −
           </button>
-          <span style={styles.zoomLabel}>확대 {zoomDisplay}</span>
+          <span style={styles.zoomLabel}>{t('zoom')} {zoomDisplay}</span>
           <button
             style={{
               ...styles.zoomButton,
@@ -447,7 +449,7 @@ const Compose: React.FC = () => {
                       alt={`촬영 이미지 ${index + 1}`}
                     />
                   ) : (
-                    <div style={styles.imagePlaceholder}>미리보기 준비 중...</div>
+                    <div style={styles.imagePlaceholder}>{t('loading_preview')}</div>
                   )}
                 </div>
               </div>
@@ -465,7 +467,7 @@ const Compose: React.FC = () => {
           onMouseOver={handleMouseOver}
           onMouseOut={handleMouseOut}
         >
-          재촬영
+          {t('retake')}
         </button>
         <button
           style={{
@@ -477,15 +479,15 @@ const Compose: React.FC = () => {
           onMouseOver={handleMouseOver}
           onMouseOut={handleMouseOut}
         >
-          인쇄하기
+          {t('print')}
         </button>
       </div>
 
       {composing && (
-        <div style={styles.statusMessage}>선택한 사진을 합성 중입니다...</div>
+        <div style={styles.statusMessage}>{t('composing')}</div>
       )}
       {!composing && selectedIndexes.length === MAX_SELECTION && finalImage && (
-        <div style={styles.statusMessage}>합성이 완료되었습니다. 인쇄하기를 눌러주세요.</div>
+        <div style={styles.statusMessage}>{t('compose_done')}</div>
       )}
     </div>
   );
