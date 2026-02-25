@@ -584,67 +584,18 @@ ipcMain.handle('compose-images', async (event, images) => {
     console.log('[compose-images] Starting image resize operations.');
     const compositeOperations = await Promise.all(images.map(async (image, index) => {
       const layout = photoLayout[index];
-      
       const brightness = settings.brightness ? parseFloat(settings.brightness) : 1.05;
       const contrast = settings.contrast ? parseFloat(settings.contrast) : 1;
       const saturation = settings.saturation ? parseFloat(settings.saturation) : 1.1;
-      const targetRatio = layout.width / layout.height;
 
-      console.log(`[compose-images] Resizing image ${index}: ${image} with brightness: ${brightness}, contrast: ${contrast}, saturation: ${saturation}`);
-      let workingBuffer = await sharp(image, { failOnError: false }).ensureAlpha().toBuffer();
-      let workingMeta = await sharp(workingBuffer).metadata();
-      const trimThresholds = [64, 48, 32, 24, 16, 8];
-      for (const threshold of trimThresholds) {
-        try {
-          const trimmed = await sharp(workingBuffer, { failOnError: false })
-            .trim({ threshold })
-            .toBuffer();
-          const trimmedMeta = await sharp(trimmed).metadata();
-          if (
-            trimmedMeta.width &&
-            trimmedMeta.height &&
-            workingMeta.width &&
-            workingMeta.height &&
-            (trimmedMeta.width < workingMeta.width || trimmedMeta.height < workingMeta.height)
-          ) {
-            console.log('[compose-images] Trim applied', { index, threshold, width: trimmedMeta.width, height: trimmedMeta.height });
-            workingBuffer = trimmed;
-            workingMeta = trimmedMeta;
-            break;
-          }
-        } catch (trimError) {
-          console.warn('[compose-images] Trim attempt failed', { index, threshold, error: trimError.message });
-        }
-      }
-
-      const columnTrim = await trimColumnsByStats(workingBuffer, {
-        meanThreshold: 22,
-        stdThreshold: 7,
-        maxTrimRatio: 0.25,
-        label: `column-trim-${index}`,
-      });
-      workingBuffer = columnTrim.buffer;
-      workingMeta = columnTrim.metadata;
-      const nativeCrop = await cropBufferToRatio(workingBuffer, CAMERA_NATIVE_RATIO, {
-        tolerance: 0.002,
-        label: `native-ratio-${index}`,
-      });
-      workingBuffer = nativeCrop.buffer;
-      workingMeta = nativeCrop.metadata;
-
-      const slotRatio = layout.width / layout.height;
-      const slotCrop = await cropBufferToRatio(workingBuffer, slotRatio, {
-        tolerance: 0.001,
-        label: `slot-ratio-${index}`,
-      });
-      workingBuffer = slotCrop.buffer;
-      workingMeta = slotCrop.metadata;
-
-      const resizedImageBuffer = await sharp(workingBuffer, { failOnError: false })
+      console.log(`[compose-images] Processing image ${index}: ${image}`);
+      
+      // Simple and predictable: apply effects and resize with cover fit (central crop)
+      const resizedImageBuffer = await sharp(image, { failOnError: false })
         .modulate({ brightness, contrast, saturation })
         .resize(layout.width, layout.height, {
           fit: sharp.fit.cover,
-          position: sharp.strategy.attention,
+          position: sharp.strategy.attention, // Focus on interesting parts if possible
           withoutEnlargement: false,
         })
         .png()

@@ -8,7 +8,10 @@ type CameraLocationState = {
   printCount?: number;
 };
 
-const TARGET_RATIO = 533 / 340;
+// Precisely defined based on the slot dimensions in the reference template
+const SLOT_WIDTH = 533;
+const SLOT_HEIGHT = 340;
+const TARGET_RATIO = SLOT_WIDTH / SLOT_HEIGHT;
 
 const Camera: React.FC = () => {
   const { t } = useTranslation();
@@ -47,7 +50,6 @@ const Camera: React.FC = () => {
       borderRadius: '6px',
       overflow: 'hidden' as 'hidden',
       zIndex: 20,
-      boxShadow: '0 2px 10px rgba(0,0,0,0.3)',
     },
     progressBar: {
       width: `${(capturedImages.length / 4) * 100}%`,
@@ -61,9 +63,6 @@ const Camera: React.FC = () => {
       left: 0,
       width: '100vw',
       height: '100vh',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
       zIndex: 1,
     },
     video: {
@@ -82,13 +81,15 @@ const Camera: React.FC = () => {
       fontWeight: 'bold',
       textShadow: '0 0 30px rgba(0,0,0,0.8)',
       zIndex: 15,
+      top: '50%',
+      left: '50%',
+      transform: 'translate(-50%, -50%)',
     },
     errorText: {
       position: 'absolute' as 'absolute',
       color: '#ff4d4d',
       fontSize: '24pt',
       textAlign: 'center' as 'center',
-      maxWidth: '80%',
       zIndex: 10,
       backgroundColor: 'rgba(0,0,0,0.7)',
       padding: '20px',
@@ -106,8 +107,6 @@ const Camera: React.FC = () => {
       background: 'rgba(0,0,0,0.5)',
       padding: '12px 24px',
       borderRadius: '16px',
-      fontWeight: 'bold' as 'bold',
-      transition: 'background 0.2s',
     },
     startOverlay: {
       position: 'absolute' as 'absolute',
@@ -119,7 +118,6 @@ const Camera: React.FC = () => {
       alignItems: 'center',
       justifyContent: 'center',
       zIndex: 10,
-      backgroundColor: 'rgba(0,0,0,0.3)',
     },
     startButton: {
       width: '320px',
@@ -132,8 +130,6 @@ const Camera: React.FC = () => {
       cursor: 'pointer',
       boxShadow: '0 10px 40px rgba(0,0,0,0.4)',
       animation: 'pulse 2s infinite',
-      pointerEvents: 'auto' as 'auto',
-      fontWeight: 'bold' as 'bold',
     },
     shutter: {
       position: 'absolute' as 'absolute',
@@ -178,6 +174,7 @@ const Camera: React.FC = () => {
     const cH = window.innerHeight;
     const cRatio = cW / cH;
     
+    // Scale factor of the video due to object-fit: cover
     let scale;
     if (vRatio > cRatio) {
       scale = cH / vH;
@@ -185,6 +182,7 @@ const Camera: React.FC = () => {
       scale = cW / vW;
     }
     
+    // Captured Area in original video pixels
     let captureW, captureH;
     if (vRatio > TARGET_RATIO) {
       captureH = vH;
@@ -194,6 +192,7 @@ const Camera: React.FC = () => {
       captureH = captureW / TARGET_RATIO;
     }
     
+    // Red line size in UI pixels
     return {
       position: 'absolute' as 'absolute',
       top: '50%',
@@ -201,11 +200,11 @@ const Camera: React.FC = () => {
       transform: 'translate(-50%, -50%)',
       width: `${captureW * scale}px`,
       height: `${captureH * scale}px`,
-      border: '6px solid #ff3b30',
-      boxShadow: '0 0 0 5000px rgba(0,0,0,0.5)',
+      border: '4px solid #ff3b30',
+      boxShadow: '0 0 0 5000px rgba(0,0,0,0.6)', // Mask outside area
       zIndex: 5,
       pointerEvents: 'none' as 'none',
-      borderRadius: '4px',
+      borderRadius: '2px',
     };
   };
 
@@ -244,9 +243,7 @@ const Camera: React.FC = () => {
         setCameraError(t('camera_not_found'));
       }
     };
-
     getCamera();
-
     return () => {
       if (videoRef.current && videoRef.current.srcObject) {
         const stream = videoRef.current.srcObject as MediaStream;
@@ -282,6 +279,7 @@ const Camera: React.FC = () => {
       const vRatio = vW / vH;
 
       let sx, sy, sw, sh;
+      // Precision Central Crop logic matching TARGET_RATIO
       if (vRatio > TARGET_RATIO) {
         sw = vH * TARGET_RATIO;
         sh = vH;
@@ -294,8 +292,9 @@ const Camera: React.FC = () => {
         sy = (vH - sh) / 2;
       }
 
-      canvas.width = 1066; // Standardized width
-      canvas.height = 680; // Standardized height (1066 / TARGET_RATIO)
+      // Save high resolution (1.5x of reference 533x340)
+      canvas.width = 799; 
+      canvas.height = 510;
       
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
