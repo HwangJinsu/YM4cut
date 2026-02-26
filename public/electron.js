@@ -27,8 +27,6 @@ const CAMERA_NATIVE_RATIO = 3 / 2;
 
 let PrinterModule;
 try {
-  // node-printer offers access to native printers for actual print jobs
-  // but can fail to load if drivers are missing; guard the require.
   PrinterModule = require('node-printer');
 } catch (error) {
   console.warn('[printer] Failed to load node-printer module:', error);
@@ -71,148 +69,6 @@ function mmToPx(mm) {
   return Math.max(0, Math.round((mm / MM_PER_INCH) * PRINT_DPI));
 }
 
-async function cropBufferToRatio(buffer, targetRatio, options = {}) {
-  const { tolerance = 0.003, label = 'crop' } = options;
-  const metadata = await sharp(buffer).metadata();
-  const width = metadata.width ?? 0;
-  const height = metadata.height ?? 0;
-
-  if (width <= 1 || height <= 1) {
-    return { buffer, metadata };
-  }
-
-  const ratio = width / height;
-  if (Math.abs(ratio - targetRatio) <= tolerance) {
-    return { buffer, metadata };
-  }
-
-  let extractRegion;
-  if (ratio > targetRatio) {
-    const desiredWidth = Math.max(1, Math.round(height * targetRatio));
-    const left = Math.max(0, Math.floor((width - desiredWidth) / 2));
-    extractRegion = {
-      left,
-      top: 0,
-      width: Math.min(desiredWidth, width - left),
-      height,
-    };
-  } else {
-    const desiredHeight = Math.max(1, Math.round(width / targetRatio));
-    const top = Math.max(0, Math.floor((height - desiredHeight) / 2));
-    extractRegion = {
-      left: 0,
-      top,
-      width,
-      height: Math.min(desiredHeight, height - top),
-    };
-  }
-
-  const croppedBuffer = await sharp(buffer)
-    .extract(extractRegion)
-    .toBuffer();
-
-  const croppedMeta = await sharp(croppedBuffer).metadata();
-  console.log('[compose-images] Crop applied', {
-    label,
-    targetRatio,
-    before: { width, height, ratio },
-    after: {
-      width: croppedMeta.width,
-      height: croppedMeta.height,
-      ratio: croppedMeta.width && croppedMeta.height ? croppedMeta.width / croppedMeta.height : null,
-    },
-  });
-
-  return { buffer: croppedBuffer, metadata: croppedMeta };
-}
-
-async function trimColumnsByStats(buffer, options = {}) {
-  const {
-    meanThreshold = 20,
-    stdThreshold = 6,
-    maxTrimRatio = 0.2,
-    label = 'column-trim',
-  } = options;
-
-  const { data, info } = await sharp(buffer)
-    .removeAlpha()
-    .greyscale()
-    .raw()
-    .toBuffer({ resolveWithObject: true });
-
-  if (!info.width || !info.height) {
-    return { buffer, metadata: await sharp(buffer).metadata() };
-  }
-
-  const columnSums = new Array(info.width).fill(0);
-  const columnSquares = new Array(info.width).fill(0);
-  for (let y = 0; y < info.height; y += 1) {
-    const rowOffset = y * info.width;
-    for (let x = 0; x < info.width; x += 1) {
-      const value = data[rowOffset + x];
-      columnSums[x] += value;
-      columnSquares[x] += value * value;
-    }
-  }
-
-  const columnMeans = columnSums.map(sum => sum / info.height);
-  const columnStd = columnSquares.map((sumSq, index) => {
-    const mean = columnMeans[index];
-    const variance = Math.max(0, sumSq / info.height - mean * mean);
-    return Math.sqrt(variance);
-  });
-
-  const maxTrimColumns = Math.floor(info.width * maxTrimRatio);
-
-  let leftTrim = 0;
-  while (
-    leftTrim < info.width - 1 &&
-    leftTrim < maxTrimColumns &&
-    columnMeans[leftTrim] <= meanThreshold &&
-    columnStd[leftTrim] <= stdThreshold
-  ) {
-    leftTrim += 1;
-  }
-
-  let rightTrim = 0;
-  while (
-    rightTrim < info.width - 1 - leftTrim &&
-    rightTrim < maxTrimColumns &&
-    columnMeans[info.width - 1 - rightTrim] <= meanThreshold &&
-    columnStd[info.width - 1 - rightTrim] <= stdThreshold
-  ) {
-    rightTrim += 1;
-  }
-
-  if (leftTrim === 0 && rightTrim === 0) {
-    return { buffer, metadata: await sharp(buffer).metadata() };
-  }
-
-  const trimmedWidth = info.width - leftTrim - rightTrim;
-  if (trimmedWidth <= 1) {
-    return { buffer, metadata: await sharp(buffer).metadata() };
-  }
-
-  console.log('[compose-images]', label, 'applied', {
-    leftTrim,
-    rightTrim,
-    meanThreshold,
-    stdThreshold,
-  });
-
-  const croppedBuffer = await sharp(buffer)
-    .extract({
-      left: leftTrim,
-      top: 0,
-      width: trimmedWidth,
-      height: info.height,
-    })
-    .toBuffer();
-
-  const croppedMeta = await sharp(croppedBuffer).metadata();
-  return { buffer: croppedBuffer, metadata: croppedMeta };
-}
-
 async function prepareImageForPrint(imagePath) {
   const desiredLongPx = PRINT_LONG_INCHES * PRINT_DPI;
   const desiredShortPx = PRINT_SHORT_INCHES * PRINT_DPI;
@@ -244,20 +100,6 @@ async function prepareImageForPrint(imagePath) {
     printableWidth - (bleedPx.left + bleedPx.right) - rightFudgePx
   );
   const baseHeight = Math.max(1, printableHeight - (bleedPx.top + bleedPx.bottom));
-  console.log('[print-image] Preparing image for print', {
-    sourceWidth: width,
-    sourceHeight: height,
-    rotate: shouldRotate ? 90 : 0,
-    targetWidth,
-    targetHeight,
-    printableWidth,
-    printableHeight,
-    baseWidth,
-    baseHeight,
-    marginsPx: marginPx,
-    bleedPx,
-    rightFudgePx,
-  });
 
   const resizedBuffer = await sharp(imagePath, { failOnError: false })
     .rotate(shouldRotate ? 90 : 0, { background: { r: 255, g: 255, b: 255, alpha: 1 } })
@@ -271,9 +113,6 @@ async function prepareImageForPrint(imagePath) {
     .png()
     .toBuffer();
 
-  const resizedMeta = await sharp(resizedBuffer).metadata();
-  console.log('[print-image] Resized dimensions', resizedMeta);
-
   const extendedBuffer = await sharp(resizedBuffer)
     .extend({
       top: bleedPx.top,
@@ -286,9 +125,6 @@ async function prepareImageForPrint(imagePath) {
     .toBuffer();
 
   const extendedMeta = await sharp(extendedBuffer).metadata();
-  const leftoverWidth = Math.max(0, printableWidth - (extendedMeta.width || 0));
-  const leftoverHeight = Math.max(0, printableHeight - (extendedMeta.height || 0));
-
   const offsetLeft = marginPx.left;
   const offsetTop = marginPx.top;
   const topShiftPx =
@@ -324,7 +160,6 @@ async function prepareImageForPrint(imagePath) {
 
   const imageTempPath = path.join(app.getPath('temp'), `ym4cut_image_${Date.now()}.png`);
   fs.writeFileSync(imageTempPath, stagedBuffer);
-  console.log('[print-image] Temp image written', imageTempPath, 'bytes', stagedBuffer.length);
 
   return {
     imagePath: imageTempPath,
@@ -336,27 +171,19 @@ async function prepareImageForPrint(imagePath) {
 
 app.whenReady().then(() => {
   createWindow();
-
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow();
-    }
+    if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
 });
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    app.quit();
-  }
+  if (process.platform !== 'darwin') app.quit();
 });
 
 ipcMain.handle('save-image', async (event, data) => {
   const sessionId = new Date().toISOString().replace(/[-:.]/g, '');
   const sessionDir = path.join(app.getPath('userData'), 'captures', `session_${sessionId}`);
-  if (!fs.existsSync(sessionDir)) {
-    fs.mkdirSync(sessionDir, { recursive: true });
-  }
-
+  if (!fs.existsSync(sessionDir)) fs.mkdirSync(sessionDir, { recursive: true });
   const imagePath = path.join(sessionDir, `capture_${Date.now()}.png`);
   const dataBuffer = Buffer.from(data.replace(/^data:image\/png;base64,/, ''), 'base64');
   fs.writeFileSync(imagePath, dataBuffer);
@@ -365,10 +192,7 @@ ipcMain.handle('save-image', async (event, data) => {
 
 ipcMain.handle('get-settings', async () => {
   const settingsPath = path.join(app.getPath('userData'), 'settings.json');
-  if (fs.existsSync(settingsPath)) {
-    const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
-    return settings;
-  }
+  if (fs.existsSync(settingsPath)) return JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
   return {};
 });
 
@@ -379,37 +203,24 @@ ipcMain.handle('save-settings', async (event, settings) => {
 
 async function enumeratePrinters() {
   const devices = new Map();
-
   if (PrinterModule && typeof PrinterModule.list === 'function') {
     try {
       const nativePrinters = PrinterModule.list();
       nativePrinters.forEach(name => {
         if (!name) return;
-        devices.set(name, {
-          name,
-          displayName: name,
-          isDefault: false,
-          source: 'node-printer',
-          status: null,
-        });
+        devices.set(name, { name, displayName: name, isDefault: false, source: 'node-printer', status: null });
       });
     } catch (nativeError) {
       console.error('Failed to get printers via node-printer:', nativeError);
     }
   }
-
   try {
     const win = getMainWindow();
     if (win) {
-      const webPrinters = win.webContents.getPrintersAsync
-        ? await win.webContents.getPrintersAsync()
-        : win.webContents.getPrinters();
-
+      const webPrinters = win.webContents.getPrintersAsync ? await win.webContents.getPrintersAsync() : win.webContents.getPrinters();
       webPrinters.forEach(device => {
         const name = device.name || device.printerName || device.deviceName;
-        if (!name) {
-          return;
-        }
+        if (!name) return;
         const existing = devices.get(name) || {};
         devices.set(name, {
           name,
@@ -423,19 +234,14 @@ async function enumeratePrinters() {
   } catch (error) {
     console.error('Failed to get printers via webContents:', error);
   }
-
   return Array.from(devices.values());
 }
 
 async function resolvePrinterName(preferredName) {
-  if (preferredName) {
-    return preferredName;
-  }
+  if (preferredName) return preferredName;
   const printers = await enumeratePrinters();
   const defaultPrinter = printers.find(printer => printer.isDefault);
-  if (defaultPrinter) {
-    return defaultPrinter.name;
-  }
+  if (defaultPrinter) return defaultPrinter.name;
   return printers[0]?.name || null;
 }
 
@@ -454,35 +260,12 @@ function getPrinterStatusDescription(status) {
 async function ensurePrinterAvailable(targetPrinter) {
   const devices = await enumeratePrinters();
   const device = devices.find(d => d.name === targetPrinter);
-  if (!device) {
-    throw new Error('err_printer_not_found');
-  }
-  console.log('[print-image] Printer status', { name: device.name, status: device.status, source: device.source });
+  if (!device) throw new Error('err_printer_not_found');
   if (typeof device.status === 'number') {
     const description = getPrinterStatusDescription(device.status);
-    if (description) {
-      throw new Error(description);
-    }
+    if (description) throw new Error(description);
   }
   return device;
-}
-
-function createImageDataUrl(imagePath) {
-  const extension = path.extname(imagePath).toLowerCase();
-  const mimeMap = {
-    '.png': 'image/png',
-    '.jpg': 'image/jpeg',
-    '.jpeg': 'image/jpeg',
-    '.bmp': 'image/bmp',
-    '.gif': 'image/gif',
-    '.webp': 'image/webp',
-  };
-  const mimeType = mimeMap[extension] || 'image/png';
-  console.log('[print-image] Reading file', imagePath, 'as', mimeType);
-  const imageBuffer = fs.readFileSync(imagePath);
-  console.log('[print-image] Read bytes', imageBuffer.length);
-  const base64 = imageBuffer.toString('base64');
-  return `data:${mimeType};base64,${base64}`;
 }
 
 ipcMain.handle('get-printers', async () => enumeratePrinters());
@@ -500,12 +283,8 @@ ipcMain.handle('get-image-as-base64', async (event, filePath) => {
 });
 
 ipcMain.handle('open-directory-dialog', async () => {
-  const { canceled, filePaths } = await dialog.showOpenDialog({
-    properties: ['openDirectory'],
-  });
-  if (canceled) {
-    return null;
-  }
+  const { canceled, filePaths } = await dialog.showOpenDialog({ properties: ['openDirectory'] });
+  if (canceled) return null;
   return filePaths[0];
 });
 
@@ -516,57 +295,30 @@ async function resolveTemplateImage(settings = {}) {
     path.join(resourceRoot, 'template-default.png'),
     path.join(resourceRoot, 'assets', 'template-default.png'),
     path.join(__dirname, 'assets', 'template-default.png'),
-    path.join(__dirname, '../src/assets/images/template-default.png'),
+    path.join(__dirname, '../public/assets', 'template-default.png'),
     path.join(app.getAppPath(), 'template.png'),
   ];
 
-  const tried = new Set();
   for (const candidate of candidates) {
-    if (!candidate || tried.has(candidate)) {
-      continue;
-    }
-    tried.add(candidate);
-    let stats;
+    if (!candidate) continue;
     try {
-      stats = fs.statSync(candidate);
-    } catch {
-      continue;
-    }
-    if (!stats.isFile() || stats.size === 0) {
-      console.log('[compose-images] Skipping template candidate (missing or empty):', candidate);
-      continue;
-    }
-    try {
-      const buffer = await sharp(candidate).ensureAlpha().toBuffer();
-      console.log('[compose-images] Template resolved to:', candidate);
-      return { buffer, path: candidate };
-    } catch (error) {
-      console.warn('[compose-images] Failed to load template candidate:', candidate, error);
-    }
+      if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) {
+        return { buffer: await sharp(candidate).ensureAlpha().toBuffer(), path: candidate };
+      }
+    } catch {}
   }
-
-  throw new Error('사용 가능한 템플릿 이미지를 찾을 수 없습니다. 설정에서 템플릿 파일을 확인해주세요.');
+  throw new Error('err_template_not_found');
 }
 
 ipcMain.handle('compose-images', async (event, images) => {
-  console.log('[compose-images] Received request.');
   try {
     const settingsPath = path.join(app.getPath('userData'), 'settings.json');
-    console.log('[compose-images] Settings path:', settingsPath);
-    const settings = fs.existsSync(settingsPath)
-      ? JSON.parse(fs.readFileSync(settingsPath, 'utf-8'))
-      : {};
-    console.log('[compose-images] Loaded settings:', settings);
-
-    const { buffer: templateBuffer, path: templatePath } = await resolveTemplateImage(settings);
-    
-    // Get template dimensions to calculate relative layout
+    const settings = fs.existsSync(settingsPath) ? JSON.parse(fs.readFileSync(settingsPath, 'utf-8')) : {};
+    const { buffer: templateBuffer } = await resolveTemplateImage(settings);
     const templateMeta = await sharp(templateBuffer).metadata();
     const tWidth = templateMeta.width;
     const tHeight = templateMeta.height;
 
-    // Relative positions based on reference template size (591x1746)
-    // These ratios ensure the photos are placed correctly regardless of the template resolution
     const layoutConfig = [
       { x: 30 / 591, y: 43 / 1746, w: 533 / 591, h: 340 / 1746 },
       { x: 30 / 591, y: 408 / 1746, w: 533 / 591, h: 340 / 1746 },
@@ -574,355 +326,107 @@ ipcMain.handle('compose-images', async (event, images) => {
       { x: 30 / 591, y: 1138 / 1746, w: 533 / 591, h: 340 / 1746 },
     ];
 
-    const photoLayout = layoutConfig.map(l => ({
-      x: Math.round(l.x * tWidth),
-      y: Math.round(l.y * tHeight),
-      width: Math.round(l.w * tWidth),
-      height: Math.round(l.h * tHeight),
-    }));
-
-    console.log('[compose-images] Starting image resize operations.');
     const compositeOperations = await Promise.all(images.map(async (image, index) => {
-      const layout = photoLayout[index];
+      const layout = layoutConfig[index];
+      const targetW = Math.round(layout.w * tWidth);
+      const targetH = Math.round(layout.h * tHeight);
+      
       const brightness = settings.brightness ? parseFloat(settings.brightness) : 1.05;
       const contrast = settings.contrast ? parseFloat(settings.contrast) : 1;
       const saturation = settings.saturation ? parseFloat(settings.saturation) : 1.1;
 
-      console.log(`[compose-images] Processing image ${index}: ${image}`);
-      
-      // Simple and predictable: apply effects and resize with cover fit (central crop)
       const resizedImageBuffer = await sharp(image, { failOnError: false })
         .modulate({ brightness, contrast, saturation })
-        .resize(layout.width, layout.height, {
+        .resize(targetW, targetH, {
           fit: sharp.fit.cover,
-          position: sharp.strategy.attention, // Focus on interesting parts if possible
+          position: sharp.strategy.entropy,
           withoutEnlargement: false,
         })
         .png()
         .toBuffer();
       
-      return {
-        input: resizedImageBuffer,
-        top: layout.y,
-        left: layout.x,
-      };
+      return { input: resizedImageBuffer, top: Math.round(layout.y * tHeight), left: Math.round(layout.x * tWidth) };
     }));
-    console.log('[compose-images] All images resized.');
 
-    console.log('[compose-images] Creating single 1x3 composite in buffer.');
-    const singleCompositeBuffer = await sharp(templateBuffer)
-      .composite(compositeOperations)
-      .png()
-      .toBuffer();
-    
+    const singleCompositeBuffer = await sharp(templateBuffer).composite(compositeOperations).png().toBuffer();
     const metadata = await sharp(singleCompositeBuffer).metadata();
     const { width, height } = metadata;
 
-    console.log(`[compose-images] Single image dimensions: ${width}x${height}. Creating 2x3 final image.`);
     const finalImageBuffer = await sharp({
-      create: {
-        width: width * 2,
-        height: height,
-        channels: 4,
-        background: { r: 255, g: 255, b: 255, alpha: 1 },
-      },
+      create: { width: width * 2, height: height, channels: 4, background: { r: 255, g: 255, b: 255, alpha: 1 } }
     })
-    .composite([
-      { input: singleCompositeBuffer, top: 0, left: 0 },
-      { input: singleCompositeBuffer, top: 0, left: width },
-    ])
+    .composite([{ input: singleCompositeBuffer, top: 0, left: 0 }, { input: singleCompositeBuffer, top: 0, left: width }])
     .png()
     .toBuffer();
 
     const sessionId = new Date().toISOString().replace(/[-:.]/g, '');
-    let outputDir;
-    if (settings.outputPath) {
-      outputDir = settings.outputPath;
-    } else {
-      outputDir = resolveDefaultOutputPath();
-    }
-
-    if (!fs.existsSync(outputDir)) {
-      fs.mkdirSync(outputDir, { recursive: true });
-    }
+    const outputDir = settings.outputPath || path.join(app.getPath('pictures'), 'YM4Cut');
+    if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
     const outputPath = path.join(outputDir, `final_${sessionId}.png`);
-    console.log('[compose-images] Output path:', outputPath);
-
     fs.writeFileSync(outputPath, finalImageBuffer);
-    console.log('[compose-images] Composition finished successfully.');
-
     return outputPath;
   } catch (error) {
-    console.error('[compose-images] Error during composition:', error);
+    console.error('[compose-images] Error:', error);
     throw error;
   }
 });
 
 ipcMain.handle('print-image', async (event, { imagePath, printerName, copies }) => {
-  const requestedCopiesRaw = Number(copies);
-  const requestedCopies = Number.isFinite(requestedCopiesRaw) && requestedCopiesRaw > 0
-    ? Math.max(1, Math.round(requestedCopiesRaw))
-    : 1;
-  console.log('[print-image] Request received', { imagePath, printerName, copies: requestedCopies });
+  const requestedCopies = Math.max(1, Math.round(Number(copies) || 1));
   const targetPrinter = await resolvePrinterName(printerName);
-  if (!targetPrinter) {
-    throw new Error('err_printer_not_found');
-  }
-
+  if (!targetPrinter) throw new Error('err_printer_not_found');
   await ensurePrinterAvailable(targetPrinter);
-  console.log('[print-image] Using printer', targetPrinter, 'copies', requestedCopies);
 
   const tryNativePrint = () => new Promise((resolve, reject) => {
     try {
-      const Printer = PrinterModule;
-      if (!Printer || typeof Printer !== 'function') {
-        return reject(new Error('err_node_printer_unavailable'));
-      }
-      const device = new Printer(targetPrinter);
+      if (!PrinterModule) return reject(new Error('err_node_printer_unavailable'));
+      const device = new PrinterModule(targetPrinter);
       let completed = 0;
-
       const sendJob = () => {
         const job = device.printFile(imagePath);
-        if (!job || typeof job.once !== 'function') {
-          return reject(new Error('err_print_job_start_failed'));
-        }
-        job.once('error', err => reject(new Error(err ? err.toString() : 'err_unknown')));
+        if (!job) return reject(new Error('err_print_job_start_failed'));
         job.once('sent', () => {
           completed += 1;
-          console.log('[print-image] Native print sent to spooler', { completed, requestedCopies });
-          if (completed >= requestedCopies) {
-            resolve();
-          } else {
-            sendJob();
-          }
+          if (completed >= requestedCopies) resolve();
+          else sendJob();
         });
+        job.once('error', err => reject(new Error(err ? err.toString() : 'err_unknown')));
       };
-
       sendJob();
-    } catch (error) {
-      reject(error);
-    }
+    } catch (error) { reject(error); }
   });
 
   const tryBrowserPrint = () => new Promise((resolve, reject) => {
-    prepareImageForPrint(imagePath)
-      .then(prepared => {
-        const { imagePath: preparedImagePath, pageSize, landscape, portrait } = prepared;
-        const imageFileUrl = pathToFileURL(preparedImagePath).toString();
-        console.log('[print-image] Prepared image payload', { preparedImagePath, pageSize, landscape, portrait, copies: requestedCopies });
-
-        const printWindow = new BrowserWindow({
-          show: false,
-          backgroundColor: '#ffffff',
-          webPreferences: {
-            offscreen: true,
-            webSecurity: false,
-            sandbox: false,
-          },
+    prepareImageForPrint(imagePath).then(prepared => {
+      const { imagePath: pPath, pageSize } = prepared;
+      const printWindow = new BrowserWindow({ show: false, webPreferences: { offscreen: true, webSecurity: false } });
+      const html = `<html><body style="margin:0;display:flex;justify-content:center;align-items:center;background:#fff;"><img src="${pathToFileURL(pPath).toString()}" style="max-width:100%;max-height:100%;object-fit:contain;" /></body></html>`;
+      printWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+      printWindow.webContents.once('did-finish-load', () => {
+        printWindow.webContents.print({ silent: true, deviceName: targetPrinter, printBackground: true, margins: { marginType: 'none' }, pageSize, copies: requestedCopies }, (success, reason) => {
+          printWindow.close();
+          if (success) resolve();
+          else reject(new Error(reason || 'err_unknown'));
         });
-
-        const cleanup = () => {
-          try {
-            if (fs.existsSync(preparedImagePath)) {
-              fs.unlinkSync(preparedImagePath);
-            }
-          } catch (err) {
-            console.warn('[print-image] Failed to delete temp image', err);
-          }
-          if (!printWindow.isDestroyed()) {
-            printWindow.close();
-          }
-        };
-
-        const orientationStyle = `@page { size: ${PRINT_SHORT_INCHES}in ${PRINT_LONG_INCHES}in; margin: 0; }`;
-        const scale = 'none';
-        const html = `
-          <html>
-            <head>
-              <style>
-                ${orientationStyle}
-                html, body {
-                  margin: 0;
-                  height: 100%;
-                  width: 100%;
-                  display: flex;
-                  justify-content: center;
-                  align-items: center;
-                  background: #fff;
-                }
-                img {
-                  max-width: 100%;
-                  max-height: 100%;
-                  object-fit: contain;
-                  transform: ${scale};
-                  transform-origin: center;
-                }
-              </style>
-            </head>
-            <body>
-              <img id="photo" src="${imageFileUrl}" />
-            </body>
-          </html>
-        `;
-
-        printWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
-
-        const waitForImage = () =>
-          printWindow.webContents.executeJavaScript(`
-            new Promise(resolve => {
-              const img = document.getElementById('photo');
-              if (!img) return resolve(false);
-              if (img.complete && img.naturalWidth > 0) return resolve(true);
-              img.onload = () => resolve(true);
-              img.onerror = () => resolve(false);
-            });
-          `);
-
-        const submitPrint = () => {
-          console.log('[print-image] Submitting print job via webContents.print', { pageSize, landscape, portrait, copies: requestedCopies });
-          printWindow.webContents.print(
-            {
-              silent: true,
-              deviceName: targetPrinter,
-              printBackground: true,
-              margins: { marginType: 'none' },
-              scaleFactor: 100,
-              pageSize,
-              landscape: false,
-              dpi: { horizontal: PRINT_DPI, vertical: PRINT_DPI },
-              copies: requestedCopies,
-            },
-            (success, failureReason) => {
-              cleanup();
-              if (success) {
-                console.log('[print-image] Browser print job forwarded to printer');
-                resolve();
-              } else {
-                console.error('[print-image] Browser print failed', failureReason);
-                reject(new Error(failureReason || '인쇄에 실패했습니다.'));
-              }
-            }
-          );
-        };
-
-        const loadTimeout = setTimeout(() => {
-          console.warn('[print-image] BrowserWindow load timeout, forcing print');
-          submitPrint();
-        }, 5000);
-
-        printWindow.webContents.on('did-start-loading', () => {
-          console.log('[print-image] BrowserWindow started loading image');
-        });
-
-        printWindow.webContents.once('did-finish-load', async () => {
-          clearTimeout(loadTimeout);
-          console.log('[print-image] BrowserWindow load finished, waiting for image');
-          const ready = await waitForImage();
-          if (!ready) {
-            cleanup();
-            return reject(new Error('인쇄 이미지를 로드하지 못했습니다.'));
-          }
-          submitPrint();
-        });
-
-        printWindow.webContents.on('did-stop-loading', () => {
-          console.log('[print-image] BrowserWindow stop loading');
-        });
-
-        printWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
-          clearTimeout(loadTimeout);
-          console.error('[print-image] BrowserWindow failed to load', { errorCode, errorDescription });
-          cleanup();
-          reject(new Error(`인쇄 미리보기 로드 실패: ${errorDescription || errorCode}`));
-        });
-
-        printWindow.webContents.on('render-process-gone', (_event, details) => {
-          clearTimeout(loadTimeout);
-          console.error('[print-image] Render process gone during print', details);
-          cleanup();
-          reject(new Error('인쇄용 렌더러가 종료되었습니다.'));
-        });
-
-        printWindow.webContents.on('console-message', (_event, level, message) => {
-          console.log('[print-image][window]', level, message);
-        });
-
-        printWindow.on('unresponsive', () => {
-          console.error('[print-image] BrowserWindow became unresponsive during print');
-        });
-      })
-      .catch(fileError => {
-        reject(new Error(`인쇄 이미지를 준비하는 중 오류가 발생했습니다: ${fileError.message}`));
       });
+    }).catch(reject);
   });
 
-  let lastError = null;
   if (PrinterModule && process.platform !== 'win32') {
-    try {
-      await tryNativePrint();
-      return;
-    } catch (nativeError) {
-      lastError = nativeError;
-      console.warn('Native print failed, attempting browser fallback:', nativeError);
-    }
+    try { await tryNativePrint(); return; } catch (e) { console.warn('Native print failed, using browser fallback'); }
   }
-
-  try {
-    await tryBrowserPrint();
-    console.log('[print-image] Print request completed', { copies: requestedCopies });
-  } catch (browserError) {
-    if (lastError) {
-      console.error('Fallback print error:', browserError);
-      throw lastError;
-    }
-    throw browserError;
-  }
+  await tryBrowserPrint();
 });
 
-ipcMain.handle('quit-app', async () => {
-  app.quit();
-});
-
-function resolveDefaultOutputPath() {
-  let outputDir;
-  if (isDev) {
-    outputDir = path.join(app.getAppPath(), 'output');
-  } else {
-    outputDir = path.join(app.getPath('pictures'), 'YM4Cut');
-  }
-  return outputDir;
-}
-
-ipcMain.handle('get-default-output-path', async () => {
-  return resolveDefaultOutputPath();
-});
-
+ipcMain.handle('quit-app', async () => app.quit());
+ipcMain.handle('get-default-output-path', async () => path.join(app.getPath('pictures'), 'YM4Cut'));
 ipcMain.handle('open-path', async (event, dirPath) => {
-  let targetPath = dirPath;
-  if (!targetPath) {
-    targetPath = resolveDefaultOutputPath();
-    if (!fs.existsSync(targetPath)) {
-      fs.mkdirSync(targetPath, { recursive: true });
-    }
-  }
-  await shell.openPath(targetPath);
+  const target = dirPath || path.join(app.getPath('pictures'), 'YM4Cut');
+  if (!fs.existsSync(target)) fs.mkdirSync(target, { recursive: true });
+  await shell.openPath(target);
 });
-
-ipcMain.handle('open-external', async (event, url) => {
-  await shell.openExternal(url);
-});
-
+ipcMain.handle('open-external', async (event, url) => shell.openExternal(url));
 ipcMain.handle('open-file-dialog', async (event, defaultPath) => {
-  const options = {
-    properties: ['openFile'],
-    filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg'] }],
-  };
-  if (defaultPath) {
-    options.defaultPath = defaultPath;
-  }
-  const { canceled, filePaths } = await dialog.showOpenDialog(options);
-  if (canceled) {
-    return null;
-  }
-  return filePaths[0];
+  const { canceled, filePaths } = await dialog.showOpenDialog({ properties: ['openFile'], filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg'] }], defaultPath });
+  return canceled ? null : filePaths[0];
 });
