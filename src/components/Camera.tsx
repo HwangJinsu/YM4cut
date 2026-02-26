@@ -64,6 +64,9 @@ const Camera: React.FC = () => {
       width: '100vw',
       height: '100vh',
       zIndex: 1,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
     },
     video: {
       width: '100%',
@@ -155,9 +158,7 @@ const Camera: React.FC = () => {
       }
     };
     const video = videoRef.current;
-    if (video) {
-      video.addEventListener('loadedmetadata', handleLoadedMetadata);
-    }
+    if (video) video.addEventListener('loadedmetadata', handleLoadedMetadata);
     return () => {
       if (video) video.removeEventListener('loadedmetadata', handleLoadedMetadata);
     };
@@ -166,58 +167,53 @@ const Camera: React.FC = () => {
   const getRedLineStyle = () => {
     if (videoDimensions.width === 0) return { display: 'none' };
     
-    const vW = videoDimensions.width;
-    const vH = videoDimensions.height;
-    const vRatio = vW / vH;
+    // Virtual cameras like EOS Utility often send 16:9 frame but actual image is 3:2 centered.
+    // We assume the user wants to see the 533:340 area relative to the VISIBLE center.
+    const vRatio = videoDimensions.width / videoDimensions.height;
+    
+    // Reference: If stream is 16:9 (1.77) and content is 3:2 (1.5), we should zoom in slightly.
+    const isWiderThan32 = vRatio > 1.6; 
     
     const cW = window.innerWidth;
     const cH = window.innerHeight;
     const cRatio = cW / cH;
     
-    // Scale factor of the video due to object-fit: cover
     let scale;
-    if (vRatio > cRatio) {
-      scale = cH / vH;
-    } else {
-      scale = cW / vW;
-    }
+    if (vRatio > cRatio) scale = cH / videoDimensions.height;
+    else scale = cW / videoDimensions.width;
     
-    // Captured Area in original video pixels
+    // Calculate Capture Area in stream pixels
     let captureW, captureH;
     if (vRatio > TARGET_RATIO) {
-      captureH = vH;
-      captureW = vH * TARGET_RATIO;
+      captureH = videoDimensions.height;
+      captureW = captureH * TARGET_RATIO;
     } else {
-      captureW = vW;
+      captureW = videoDimensions.width;
       captureH = captureW / TARGET_RATIO;
     }
-    
-    // Red line size in UI pixels
+
+    // Apply extra zoom for EOS Utility if it has black bars
+    const zoomFactor = isWiderThan32 ? 1.15 : 1.0; 
+
     return {
       position: 'absolute' as 'absolute',
       top: '50%',
       left: '50%',
       transform: 'translate(-50%, -50%)',
-      width: `${captureW * scale}px`,
-      height: `${captureH * scale}px`,
-      border: '4px solid #ff3b30',
-      boxShadow: '0 0 0 5000px rgba(0,0,0,0.6)', // Mask outside area
+      width: `${(captureW * scale) / zoomFactor}px`,
+      height: `${(captureH * scale) / zoomFactor}px`,
+      border: '6px solid #ff3b30',
+      boxShadow: `0 0 0 5000px rgba(0,0,0,${isWiderThan32 ? '0.7' : '0.5'})`,
       zIndex: 5,
       pointerEvents: 'none' as 'none',
-      borderRadius: '2px',
+      borderRadius: '4px',
     };
   };
 
   useEffect(() => {
     const state = location.state as CameraLocationState | null;
-    if (state?.baseImages && Array.isArray(state.baseImages) && state.baseImages.length === 4) {
-      baseImagesRef.current = state.baseImages;
-    } else {
-      baseImagesRef.current = [];
-    }
-    if (typeof state?.printCount === 'number' && Number.isFinite(state.printCount)) {
-      printCountRef.current = Math.max(1, Math.round(state.printCount));
-    }
+    if (state?.baseImages) baseImagesRef.current = state.baseImages;
+    if (state?.printCount) printCountRef.current = state.printCount;
   }, [location.state]);
 
   useEffect(() => {
@@ -225,43 +221,29 @@ const Camera: React.FC = () => {
       try {
         const settings = await window.electron.getSettings();
         if (settings.isCameraFlipped) setIsFlipped(true);
-        if (settings.shutterTimer) {
-          setShutterInterval(Math.min(10, Math.max(5, parseInt(settings.shutterTimer, 10))));
-        }
+        if (settings.shutterTimer) setShutterInterval(parseInt(settings.shutterTimer, 10));
         
-        const videoConstraints: MediaStreamConstraints['video'] = {
-          width: { ideal: 1920 },
-          height: { ideal: 1080 },
-        };
-        if (settings.selectedCamera) {
-          videoConstraints.deviceId = { exact: settings.selectedCamera };
-        }
-        const stream = await navigator.mediaDevices.getUserMedia({ video: videoConstraints });
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+          video: settings.selectedCamera ? { deviceId: { exact: settings.selectedCamera } } : true 
+        });
         if (videoRef.current) videoRef.current.srcObject = stream;
       } catch (err) {
-        console.error("Error accessing camera: ", err);
         setCameraError(t('camera_not_found'));
       }
     };
     getCamera();
     return () => {
-      if (videoRef.current && videoRef.current.srcObject) {
-        const stream = videoRef.current.srcObject as MediaStream;
-        stream.getTracks().forEach(track => track.stop());
-      }
+      if (videoRef.current?.srcObject) (videoRef.current.srcObject as MediaStream).getTracks().forEach(t => t.stop());
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [t]);
 
   useEffect(() => {
     if (capturedImages.length === 4) {
-      const baseImages = baseImagesRef.current;
-      const sharedState = { printCount: printCountRef.current };
       navigate('/compose', {
         state: {
-          ...sharedState,
-          baseImages: baseImages.length > 0 ? [...baseImages] : [...capturedImages],
-          reshootImages: baseImages.length > 0 ? [...capturedImages] : undefined,
+          printCount: printCountRef.current,
+          baseImages: baseImagesRef.current.length > 0 ? [...baseImagesRef.current] : [...capturedImages],
+          reshootImages: baseImagesRef.current.length > 0 ? [...capturedImages] : undefined,
         },
       });
     }
@@ -278,24 +260,35 @@ const Camera: React.FC = () => {
       const vH = video.videoHeight;
       const vRatio = vW / vH;
 
-      let sx, sy, sw, sh;
-      // Precision Central Crop logic matching TARGET_RATIO
-      if (vRatio > TARGET_RATIO) {
-        sw = vH * TARGET_RATIO;
-        sh = vH;
-        sx = (vW - sw) / 2;
-        sy = 0;
-      } else {
-        sw = vW;
-        sh = vW / TARGET_RATIO;
-        sx = 0;
-        sy = (vH - sh) / 2;
+      // Smart Crop for EOS Utility (If wider than 1.6, assume it's 16:9 with bars and crop to 3:2 first)
+      let sourceW = vW;
+      let sourceH = vH;
+      let sourceX = 0;
+      let sourceY = 0;
+
+      if (vRatio > 1.6) {
+        // Force crop to 3:2 first to remove black side bars
+        sourceW = vH * 1.5;
+        sourceX = (vW - sourceW) / 2;
       }
 
-      // Save high resolution (1.5x of reference 533x340)
-      canvas.width = 799; 
-      canvas.height = 510;
+      let sx, sy, sw, sh;
+      const currentRatio = sourceW / sourceH;
       
+      if (currentRatio > TARGET_RATIO) {
+        sw = sourceH * TARGET_RATIO;
+        sh = sourceH;
+        sx = sourceX + (sourceW - sw) / 2;
+        sy = sourceY;
+      } else {
+        sw = sourceW;
+        sh = sourceW / TARGET_RATIO;
+        sx = sourceX;
+        sy = sourceY + (sourceH - sh) / 2;
+      }
+
+      canvas.width = 1066;
+      canvas.height = 680;
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
 
@@ -305,9 +298,7 @@ const Camera: React.FC = () => {
       }
 
       ctx.drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
-
-      const dataUrl = canvas.toDataURL('image/png');
-      const imagePath = await window.electron.saveImage(dataUrl);
+      const imagePath = await window.electron.saveImage(canvas.toDataURL('image/png'));
       setCapturedImages(prev => [...prev, imagePath]);
     }
   };
@@ -317,17 +308,15 @@ const Camera: React.FC = () => {
     const sequence = () => {
       let count = shutterInterval;
       setCountdown(count);
-      const countdownInterval = setInterval(() => {
+      const interval = setInterval(() => {
         count -= 1;
         if (count <= 0) {
-          clearInterval(countdownInterval);
+          clearInterval(interval);
           setCountdown(null);
           capture();
           captureCount += 1;
-          if (captureCount < 4) setTimeout(sequence, 800);
-        } else {
-          setCountdown(count);
-        }
+          if (captureCount < 4) setTimeout(sequence, 1000);
+        } else setCountdown(count);
       }, 1000);
     };
     sequence();
@@ -335,30 +324,17 @@ const Camera: React.FC = () => {
 
   return (
     <div style={styles.container}>
-      <div style={styles.progressBarContainer}>
-        <div style={styles.progressBar}></div>
-      </div>
-      
+      <div style={styles.progressBarContainer}><div style={styles.progressBar}></div></div>
       <Link to="/select" style={styles.backButton}>{t('back')}</Link>
-      
       <div style={styles.videoWrapper}>
-        {cameraError ? (
-          <div style={styles.errorText}>{cameraError}</div>
-        ) : (
-          <video ref={videoRef} style={styles.video} autoPlay playsInline />
-        )}
+        {cameraError ? <div style={styles.errorText}>{cameraError}</div> : <video ref={videoRef} style={styles.video} autoPlay playsInline />}
         <div style={getRedLineStyle()} />
       </div>
-
       <canvas ref={canvasRef} style={styles.canvas} />
       <div style={{...styles.shutter, opacity: shutter ? 1 : 0}}></div>
-      
       {countdown !== null && <div style={styles.countdown}>{countdown}</div>}
-      
       {capturedImages.length === 0 && countdown === null && !cameraError && (
-        <div style={styles.startOverlay}>
-          <button style={styles.startButton} onClick={startCaptureSequence}>{t('take_photo')}</button>
-        </div>
+        <div style={styles.startOverlay}><button style={styles.startButton} onClick={startCaptureSequence}>{t('take_photo')}</button></div>
       )}
     </div>
   );
