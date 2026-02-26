@@ -59,68 +59,38 @@ const Camera: React.FC = () => {
     },
     videoWrapper: {
       position: 'absolute' as 'absolute',
-      top: 0,
-      left: 0,
-      width: '100vw',
-      height: '100vh',
-      zIndex: 1,
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
+      top: 0, left: 0, width: '100vw', height: '100vh',
+      zIndex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
       overflow: 'hidden',
     },
-    video: (vRatio: number) => {
-      // If the stream is 16:9 but likely contains 3:2 content (EOS Utility),
-      // we zoom in by ~18% to hide the black bars from the user.
-      const shouldZoom = vRatio > 1.6;
-      return {
-        width: '100%',
-        height: '100%',
-        objectFit: 'cover' as 'cover',
-        transform: `${isFlipped ? 'scaleX(-1)' : ''} ${shouldZoom ? 'scale(1.18)' : ''}`,
-        transition: 'transform 0.3s ease-out',
-      };
+    video: {
+      width: '100%',
+      height: '100%',
+      objectFit: 'cover' as 'cover',
+      transform: isFlipped ? 'scaleX(-1)' : 'none',
     },
     canvas: { display: 'none' },
     countdown: {
       position: 'absolute' as 'absolute',
-      color: 'white',
-      fontSize: '180pt',
-      fontWeight: 'bold',
-      textShadow: '0 0 30px rgba(0,0,0,0.8)',
-      zIndex: 15,
-      top: '50%',
-      left: '50%',
-      transform: 'translate(-50%, -50%)',
+      color: 'white', fontSize: '180pt', fontWeight: 'bold',
+      textShadow: '0 0 30px rgba(0,0,0,0.8)', zIndex: 15,
+      top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
     },
     errorText: {
       position: 'absolute' as 'absolute',
-      color: '#ff4d4d',
-      fontSize: '24pt',
-      textAlign: 'center' as 'center',
-      zIndex: 10,
-      backgroundColor: 'rgba(0,0,0,0.7)',
-      padding: '20px',
-      borderRadius: '16px',
+      color: '#ff4d4d', fontSize: '24pt', textAlign: 'center' as 'center',
+      zIndex: 10, backgroundColor: 'rgba(0,0,0,0.7)', padding: '20px', borderRadius: '16px',
     },
     backButton: {
       position: 'absolute' as 'absolute',
-      top: '40px',
-      left: '40px',
-      fontSize: '28px',
-      color: 'white',
-      cursor: 'pointer',
-      textDecoration: 'none',
-      zIndex: 20,
-      background: 'rgba(0,0,0,0.5)',
-      padding: '12px 24px',
-      borderRadius: '16px',
+      top: '40px', left: '40px', fontSize: '28px', color: 'white',
+      cursor: 'pointer', textDecoration: 'none', zIndex: 20,
+      background: 'rgba(0,0,0,0.5)', padding: '12px 24px', borderRadius: '16px',
     },
     startOverlay: {
       position: 'absolute' as 'absolute',
       top: 0, left: 0, width: '100%', height: '100%',
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      zIndex: 10,
+      display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10,
     },
     startButton: {
       width: '320px', height: '130px',
@@ -153,45 +123,58 @@ const Camera: React.FC = () => {
     };
   }, []);
 
+  // Shared Logic for Guide and Capture
+  const calculateCropParams = (vW: number, vH: number) => {
+    const vRatio = vW / vH;
+    
+    // EOS Utility Detection: If 16:9 stream but has side black bars (usually 3:2 inside)
+    const isEOS = vRatio > 1.6; 
+    const effectiveVW = isEOS ? vH * 1.5 : vW;
+    const startX = isEOS ? (vW - effectiveVW) / 2 : 0;
+
+    let sx, sy, sw, sh;
+    const currentRatio = effectiveVW / vH;
+    
+    if (currentRatio > TARGET_RATIO) {
+      // Crop sides
+      sw = vH * TARGET_RATIO;
+      sh = vH;
+      sx = startX + (effectiveVW - sw) / 2;
+      sy = 0;
+    } else {
+      // Crop top/bottom
+      sw = effectiveVW;
+      sh = effectiveVW / TARGET_RATIO;
+      sx = startX;
+      sy = (vH - sh) / 2;
+    }
+    return { sx, sy, sw, sh, isEOS };
+  };
+
   const getRedLineStyle = () => {
     if (videoDimensions.width === 0) return { display: 'none' };
     
-    const vW = videoDimensions.width;
-    const vH = videoDimensions.height;
-    const vRatio = vW / vH;
+    const { sw, sh } = calculateCropParams(videoDimensions.width, videoDimensions.height);
     
     const cW = window.innerWidth;
     const cH = window.innerHeight;
     const cRatio = cW / cH;
+    const vRatio = videoDimensions.width / videoDimensions.height;
     
-    // Calculate the actual scale of the video on screen due to object-fit: cover
+    // scale factor of object-fit: cover
     let scale;
-    if (vRatio > cRatio) scale = cH / vH;
-    else scale = cW / vW;
+    if (vRatio > cRatio) scale = cH / videoDimensions.height;
+    else scale = cW / videoDimensions.width;
     
-    // If the video is zoomed (EOS mode), the red line must be calculated relative to that zoom
-    const isWiderThan32 = vRatio > 1.6;
-    const zoomFactor = isWiderThan32 ? 1.18 : 1.0;
-
-    // The captured area size in original video pixels
-    let captureW, captureH;
-    if (vRatio > TARGET_RATIO) {
-      captureH = vH;
-      captureW = captureH * TARGET_RATIO;
-    } else {
-      captureW = vW;
-      captureH = captureW / TARGET_RATIO;
-    }
-
     return {
       position: 'absolute' as 'absolute',
       top: '50%',
       left: '50%',
       transform: 'translate(-50%, -50%)',
-      width: `${(captureW * scale) * zoomFactor}px`,
-      height: `${(captureH * scale) * zoomFactor}px`,
+      width: `${sw * scale}px`,
+      height: `${sh * scale}px`,
       border: '6px solid #ff3b30',
-      boxShadow: `0 0 0 5000px rgba(0,0,0,${isWiderThan32 ? '0.75' : '0.5'})`,
+      boxShadow: '0 0 0 5000px rgba(0,0,0,0.6)',
       zIndex: 5,
       pointerEvents: 'none' as 'none',
       borderRadius: '4px',
@@ -242,33 +225,10 @@ const Camera: React.FC = () => {
     setTimeout(() => setShutter(false), 150);
 
     if (videoRef.current && canvasRef.current) {
-      const video = videoRef.current;
+      const { sx, sy, sw, sh } = calculateCropParams(videoRef.current.videoWidth, videoRef.current.videoHeight);
       const canvas = canvasRef.current;
-      const vW = video.videoWidth;
-      const vH = video.videoHeight;
-      const vRatio = vW / vH;
 
-      // Logic: If stream is very wide (16:9), it's likely EOS with bars.
-      // We crop more aggressively from the center.
-      const isEOS = vRatio > 1.6;
-      const effectiveVW = isEOS ? vH * 1.5 : vW; // If EOS, treat as 3:2 content
-      const startX = isEOS ? (vW - effectiveVW) / 2 : 0;
-
-      let sx, sy, sw, sh;
-      const currentRatio = effectiveVW / vH;
-      
-      if (currentRatio > TARGET_RATIO) {
-        sw = vH * TARGET_RATIO;
-        sh = vH;
-        sx = startX + (effectiveVW - sw) / 2;
-        sy = 0;
-      } else {
-        sw = effectiveVW;
-        sh = effectiveVW / TARGET_RATIO;
-        sx = startX;
-        sy = (vH - sh) / 2;
-      }
-
+      // Output size at ~2x slot resolution for high quality
       canvas.width = 1066;
       canvas.height = 680;
       const ctx = canvas.getContext('2d');
@@ -279,7 +239,7 @@ const Camera: React.FC = () => {
         ctx.scale(-1, 1);
       }
 
-      ctx.drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+      ctx.drawImage(videoRef.current, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
       const imagePath = await window.electron.saveImage(canvas.toDataURL('image/png'));
       setCapturedImages(prev => [...prev, imagePath]);
     }
@@ -304,18 +264,12 @@ const Camera: React.FC = () => {
     sequence();
   };
 
-  const currentRatio = videoDimensions.width / videoDimensions.height;
-
   return (
     <div style={styles.container}>
       <div style={styles.progressBarContainer}><div style={styles.progressBar}></div></div>
       <Link to="/select" style={styles.backButton}>{t('back')}</Link>
       <div style={styles.videoWrapper}>
-        {cameraError ? (
-          <div style={styles.errorText}>{cameraError}</div>
-        ) : (
-          <video ref={videoRef} style={styles.video(currentRatio)} autoPlay playsInline />
-        )}
+        {cameraError ? <div style={styles.errorText}>{cameraError}</div> : <video ref={videoRef} style={styles.video} autoPlay playsInline />}
         <div style={getRedLineStyle()} />
       </div>
       <canvas ref={canvasRef} style={styles.canvas} />
