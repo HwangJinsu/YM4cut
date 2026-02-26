@@ -69,6 +69,9 @@
       "build/**/*",
       "node_modules/**/*"
     ],
+    "extraResources": [
+      "template-default.png"
+    ],
     "directories": {
       "buildResources": "assets"
     },

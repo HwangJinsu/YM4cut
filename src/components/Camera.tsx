@@ -11,7 +11,7 @@ type CameraLocationState = {
 // Precisely defined based on the slot dimensions in the reference template
 const SLOT_WIDTH = 533;
 const SLOT_HEIGHT = 340;
-const TARGET_RATIO = SLOT_WIDTH / SLOT_HEIGHT;
+const TARGET_RATIO = SLOT_WIDTH / SLOT_HEIGHT; // ~1.567
 
 const Camera: React.FC = () => {
   const { t } = useTranslation();
@@ -67,16 +67,21 @@ const Camera: React.FC = () => {
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
+      overflow: 'hidden',
     },
-    video: {
-      width: '100%',
-      height: '100%',
-      objectFit: 'cover' as 'cover',
-      transform: isFlipped ? 'scaleX(-1)' : 'none',
+    video: (vRatio: number) => {
+      // If the stream is 16:9 but likely contains 3:2 content (EOS Utility),
+      // we zoom in by ~18% to hide the black bars from the user.
+      const shouldZoom = vRatio > 1.6;
+      return {
+        width: '100%',
+        height: '100%',
+        objectFit: 'cover' as 'cover',
+        transform: `${isFlipped ? 'scaleX(-1)' : ''} ${shouldZoom ? 'scale(1.18)' : ''}`,
+        transition: 'transform 0.3s ease-out',
+      };
     },
-    canvas: {
-      display: 'none',
-    },
+    canvas: { display: 'none' },
     countdown: {
       position: 'absolute' as 'absolute',
       color: 'white',
@@ -113,38 +118,22 @@ const Camera: React.FC = () => {
     },
     startOverlay: {
       position: 'absolute' as 'absolute',
-      top: 0,
-      left: 0,
-      width: '100%',
-      height: '100%',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
+      top: 0, left: 0, width: '100%', height: '100%',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
       zIndex: 10,
     },
     startButton: {
-      width: '320px',
-      height: '130px',
-      backgroundColor: 'var(--primary-color)',
-      color: 'white',
-      fontSize: '36pt',
-      border: 'none',
-      borderRadius: '24px',
-      cursor: 'pointer',
-      boxShadow: '0 10px 40px rgba(0,0,0,0.4)',
+      width: '320px', height: '130px',
+      backgroundColor: 'var(--primary-color)', color: 'white',
+      fontSize: '36pt', border: 'none', borderRadius: '24px',
+      cursor: 'pointer', boxShadow: '0 10px 40px rgba(0,0,0,0.4)',
       animation: 'pulse 2s infinite',
     },
     shutter: {
       position: 'absolute' as 'absolute',
-      top: 0,
-      left: 0,
-      width: '100%',
-      height: '100%',
-      backgroundColor: 'white',
-      opacity: 0,
-      transition: 'opacity 0.1s ease-out',
-      pointerEvents: 'none' as 'none',
-      zIndex: 30,
+      top: 0, left: 0, width: '100%', height: '100%',
+      backgroundColor: 'white', opacity: 0, transition: 'opacity 0.1s ease-out',
+      pointerEvents: 'none' as 'none', zIndex: 30,
     },
   };
 
@@ -167,43 +156,42 @@ const Camera: React.FC = () => {
   const getRedLineStyle = () => {
     if (videoDimensions.width === 0) return { display: 'none' };
     
-    // Virtual cameras like EOS Utility often send 16:9 frame but actual image is 3:2 centered.
-    // We assume the user wants to see the 533:340 area relative to the VISIBLE center.
-    const vRatio = videoDimensions.width / videoDimensions.height;
-    
-    // Reference: If stream is 16:9 (1.77) and content is 3:2 (1.5), we should zoom in slightly.
-    const isWiderThan32 = vRatio > 1.6; 
+    const vW = videoDimensions.width;
+    const vH = videoDimensions.height;
+    const vRatio = vW / vH;
     
     const cW = window.innerWidth;
     const cH = window.innerHeight;
     const cRatio = cW / cH;
     
+    // Calculate the actual scale of the video on screen due to object-fit: cover
     let scale;
-    if (vRatio > cRatio) scale = cH / videoDimensions.height;
-    else scale = cW / videoDimensions.width;
+    if (vRatio > cRatio) scale = cH / vH;
+    else scale = cW / vW;
     
-    // Calculate Capture Area in stream pixels
+    // If the video is zoomed (EOS mode), the red line must be calculated relative to that zoom
+    const isWiderThan32 = vRatio > 1.6;
+    const zoomFactor = isWiderThan32 ? 1.18 : 1.0;
+
+    // The captured area size in original video pixels
     let captureW, captureH;
     if (vRatio > TARGET_RATIO) {
-      captureH = videoDimensions.height;
+      captureH = vH;
       captureW = captureH * TARGET_RATIO;
     } else {
-      captureW = videoDimensions.width;
+      captureW = vW;
       captureH = captureW / TARGET_RATIO;
     }
-
-    // Apply extra zoom for EOS Utility if it has black bars
-    const zoomFactor = isWiderThan32 ? 1.15 : 1.0; 
 
     return {
       position: 'absolute' as 'absolute',
       top: '50%',
       left: '50%',
       transform: 'translate(-50%, -50%)',
-      width: `${(captureW * scale) / zoomFactor}px`,
-      height: `${(captureH * scale) / zoomFactor}px`,
+      width: `${(captureW * scale) * zoomFactor}px`,
+      height: `${(captureH * scale) * zoomFactor}px`,
       border: '6px solid #ff3b30',
-      boxShadow: `0 0 0 5000px rgba(0,0,0,${isWiderThan32 ? '0.7' : '0.5'})`,
+      boxShadow: `0 0 0 5000px rgba(0,0,0,${isWiderThan32 ? '0.75' : '0.5'})`,
       zIndex: 5,
       pointerEvents: 'none' as 'none',
       borderRadius: '4px',
@@ -260,31 +248,25 @@ const Camera: React.FC = () => {
       const vH = video.videoHeight;
       const vRatio = vW / vH;
 
-      // Smart Crop for EOS Utility (If wider than 1.6, assume it's 16:9 with bars and crop to 3:2 first)
-      let sourceW = vW;
-      let sourceH = vH;
-      let sourceX = 0;
-      let sourceY = 0;
-
-      if (vRatio > 1.6) {
-        // Force crop to 3:2 first to remove black side bars
-        sourceW = vH * 1.5;
-        sourceX = (vW - sourceW) / 2;
-      }
+      // Logic: If stream is very wide (16:9), it's likely EOS with bars.
+      // We crop more aggressively from the center.
+      const isEOS = vRatio > 1.6;
+      const effectiveVW = isEOS ? vH * 1.5 : vW; // If EOS, treat as 3:2 content
+      const startX = isEOS ? (vW - effectiveVW) / 2 : 0;
 
       let sx, sy, sw, sh;
-      const currentRatio = sourceW / sourceH;
+      const currentRatio = effectiveVW / vH;
       
       if (currentRatio > TARGET_RATIO) {
-        sw = sourceH * TARGET_RATIO;
-        sh = sourceH;
-        sx = sourceX + (sourceW - sw) / 2;
-        sy = sourceY;
+        sw = vH * TARGET_RATIO;
+        sh = vH;
+        sx = startX + (effectiveVW - sw) / 2;
+        sy = 0;
       } else {
-        sw = sourceW;
-        sh = sourceW / TARGET_RATIO;
-        sx = sourceX;
-        sy = sourceY + (sourceH - sh) / 2;
+        sw = effectiveVW;
+        sh = effectiveVW / TARGET_RATIO;
+        sx = startX;
+        sy = (vH - sh) / 2;
       }
 
       canvas.width = 1066;
@@ -322,12 +304,18 @@ const Camera: React.FC = () => {
     sequence();
   };
 
+  const currentRatio = videoDimensions.width / videoDimensions.height;
+
   return (
     <div style={styles.container}>
       <div style={styles.progressBarContainer}><div style={styles.progressBar}></div></div>
       <Link to="/select" style={styles.backButton}>{t('back')}</Link>
       <div style={styles.videoWrapper}>
-        {cameraError ? <div style={styles.errorText}>{cameraError}</div> : <video ref={videoRef} style={styles.video} autoPlay playsInline />}
+        {cameraError ? (
+          <div style={styles.errorText}>{cameraError}</div>
+        ) : (
+          <video ref={videoRef} style={styles.video(currentRatio)} autoPlay playsInline />
+        )}
         <div style={getRedLineStyle()} />
       </div>
       <canvas ref={canvasRef} style={styles.canvas} />
